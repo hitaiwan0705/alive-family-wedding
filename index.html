@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="給家人的婚禮準備小冊：提親、登記、訂婚、結婚的日期、行程、準備項目與預算，可直接提出修改建議。">
+<meta name="description" content="給家人的婚禮準備小冊：提親、登記、訂婚、結婚的日期、行程、準備項目與預算，可以直接留下意見。">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#713b43"><title>給家人的婚禮小冊</title>
 <link rel="stylesheet" href="styles.css"><script src="content.js" defer></script><script src="app.js" defer></script>
@@ -21,7 +21,7 @@
   <div class="hero-copy">
     <p class="eyebrow">有你們的祝福，就是好日子</p>
     <h1 id="title">提親到婚宴，<br>一頁看清楚。</h1>
-    <p class="intro">日期、當天行程、要準備的東西、要花多少錢，都在這一頁，兩家看到的是同一份。<br>看到想改的地方，直接按「修改」，改好傳給我們就好。</p>
+    <p class="intro">日期、當天行程、要準備的東西、要花多少錢，都在這一頁，兩家看到的是同一份。<br>有想法不用打電話，在這一頁點一點，就能傳給新人。</p>
     <div class="meta"><span id="version"></span><span id="updated"></span></div>
     <div class="next" id="next-event" aria-live="polite"></div>
   </div>
@@ -29,6 +29,16 @@
 </section>
 
 <aside class="notice"><strong>先跟大家說一聲</strong><p id="notice"></p></aside>
+
+<section class="howto" aria-labelledby="howto-title">
+  <h2 id="howto-title">怎麼留意見？三個步驟</h2>
+  <ol>
+    <li><span class="howto-no">1</span><div><strong>看到想說的地方</strong><p>按旁邊的 <span class="inline-chip">我有意見</span></p></div></li>
+    <li><span class="howto-no">2</span><div><strong>點一個看法</strong><p>例如「太多了」「這天不方便」。想多說可以打字，或按鍵盤上的麥克風用說的。</p></div></li>
+    <li><span class="howto-no">3</span><div><strong>用 LINE 傳給新人</strong><p>全部看完，到最下面按綠色的「用 LINE 傳給新人」。</p></div></li>
+  </ol>
+  <p class="howto-note">意見只會先記在您的手機裡，傳給新人前不會有人看到，也不會改到這一頁。</p>
+</section>
 
 <section id="overview" aria-labelledby="overview-title">
   <div class="section-head"><div><p class="eyebrow">01 / 一眼看完</p><h2 id="overview-title">四件事，依序來</h2></div><span class="small-note">點一下可以看詳細內容</span></div>
@@ -46,7 +56,7 @@
 
 <section id="budget" aria-labelledby="budget-title">
   <div class="section-head"><div><p class="eyebrow">07 / 預算總覽</p><h2 id="budget-title">錢花在哪裡、由誰負擔</h2></div><span class="pill">試算・會依報價調整</span></div>
-  <p class="section-intro">以下是目前的試算。您在上面改過的金額與分攤比例，會直接反映在這裡，並和原本的版本比較。</p>
+  <p class="section-intro">以下是目前的試算。您對金額或由誰負擔的意見，會直接算進這裡，並和原本的試算比較。</p>
   <div id="budget-summary"></div>
 </section>
 
@@ -56,26 +66,32 @@
 </section>
 
 <section id="feedback" aria-labelledby="feedback-title">
-  <div class="section-head"><div><p class="eyebrow">09 / 把想法傳給新人</p><h2 id="feedback-title">送出我的建議</h2></div></div>
-  <p class="section-intro">您的修改只存在這支手機裡，不會改到正式安排。按下面的按鈕傳給新人，我們整理、和兩家討論後，採納的部分會更新到這一頁。</p>
-  <div class="feedback-grid">
-    <form id="feedback-form" novalidate>
-      <div class="changes-box"><h3>我改了哪些地方</h3><ul id="change-list" class="change-list"></ul></div>
-      <label for="name">怎麼稱呼您 <span>（選填）</span></label>
+  <div class="section-head"><div><p class="eyebrow">09 / 把意見傳給新人</p><h2 id="feedback-title" tabindex="-1">傳意見給新人</h2></div></div>
+  <form id="feedback-form" class="send-steps" novalidate>
+    <div class="send-step">
+      <h3><span class="howto-no">1</span>看一下記下的意見 <small id="opinion-count"></small></h3>
+      <ul id="opinion-list" class="opinion-list"></ul>
+      <label for="message">其他想說的話 <span>（選填，也可以用說的）</span></label>
+      <textarea id="message" maxlength="2000" rows="3" placeholder="例如：大家辛苦了，有需要幫忙的地方儘管說。"></textarea>
+    </div>
+    <div class="send-step">
+      <h3><span class="howto-no">2</span>怎麼稱呼您</h3>
+      <label for="name" class="sr-only">怎麼稱呼您</label>
       <input id="name" autocomplete="name" maxlength="40" placeholder="例如：大姑、舅舅、黃爸爸">
-      <label for="message" class="gap">還想說的話 <span>（選填）</span></label>
-      <textarea id="message" maxlength="2000" rows="4" placeholder="例如：希望先拍長輩合照，大家比較不用久候。"></textarea>
-      <div class="form-actions">
-        <a id="line-button" class="button line" href="#" target="_blank" rel="noopener noreferrer">用 LINE 傳給新人</a>
-        <a id="email-button" class="button secondary" href="#">用 Email 寄出</a>
-        <button id="copy-button" class="button secondary" type="button">複製文字</button>
-      </div>
+    </div>
+    <div class="send-step" id="send-area">
+      <h3><span class="howto-no">3</span>傳出去</h3>
+      <a id="line-button" class="button line big" href="#" target="_blank" rel="noopener noreferrer">用 LINE 傳給新人</a>
+      <p class="help">會打開 LINE，選新人或家族群組，按「傳送」才會送出。</p>
+      <details class="other-ways"><summary>沒有 LINE？其他方式</summary>
+        <div class="form-actions"><a id="email-button" class="button secondary" href="#">用 Email 寄出</a><button id="copy-button" class="button secondary" type="button">複製文字</button></div>
+      </details>
       <p id="feedback-status" role="status" class="status"></p>
       <div id="manual-copy" hidden><label for="copy-text">請長按下方文字、全選後複製</label><textarea id="copy-text" readonly rows="8"></textarea></div>
-      <button id="reset-draft" class="text-button" type="button">清除我在這支手機上的所有修改</button>
-    </form>
-    <aside class="feedback-note"><span aria-hidden="true">♡</span><h3>先聽想法，再做決定</h3><ol><li>您在頁面上修改、新增</li><li>按「用 LINE 傳給新人」</li><li>新人整理、和兩家討論</li><li>採納的部分更新到這一頁</li></ol><p>傳出去的訊息裡有一個連結，新人點開就能看到您改的版本。不方便打字，也可以請家人幫忙。</p></aside>
-  </div>
+    </div>
+    <p class="howto-note">新人整理、和兩家討論後，採納的部分會更新到這一頁。</p>
+    <button id="reset-draft" class="text-button" type="button">傳完了，清空，重新開始</button>
+  </form>
 </section>
 
 <section id="updates" aria-labelledby="updates-title">
@@ -87,22 +103,28 @@
 <footer><span aria-hidden="true">囍</span><p>婚禮是一天，家人是一輩子。</p><small>以本頁最新公告為準；出發前請再次確認集合時間與地點。</small><a href="#">回到最上面 ↑</a></footer>
 </main>
 
-<div class="dock" id="dock" hidden><span id="dock-text"></span><a class="button small" href="#feedback">去送出</a></div>
+<div class="dock" id="dock" hidden><span id="dock-text"></span><button class="button small" id="dock-go" type="button">傳給新人</button></div>
 
-<dialog id="editor" aria-labelledby="editor-title">
-  <form method="dialog" id="editor-form">
-    <header class="sheet-head"><h2 id="editor-title">修改項目</h2><button type="button" class="close" id="editor-close" aria-label="關閉">×</button></header>
-    <p class="sheet-phase" id="editor-phase"></p>
-    <div id="name-field"><label for="ed-name">項目名稱</label><input id="ed-name" maxlength="40" placeholder="例如：媒人禮餅"></div>
-    <label for="ed-amount" class="gap">金額（新台幣）</label>
-    <div class="stepper"><button type="button" id="ed-minus" aria-label="減少">−</button><input id="ed-amount" type="text" inputmode="numeric" autocomplete="off" aria-describedby="ed-amount-hint"><button type="button" id="ed-plus" aria-label="增加">＋</button></div>
-    <p class="hint" id="ed-amount-hint"></p>
-    <div class="presets" id="ed-presets"></div>
-    <fieldset class="split"><legend>誰負擔（比例）</legend><p class="hint">拉動一個，其他會自動調整成合計 100%。</p><div id="ed-split"></div></fieldset>
-    <label class="check" id="remove-field"><input type="checkbox" id="ed-remove"> 我覺得這項可以不用</label>
-    <label for="ed-note" class="gap">想說明的原因 <span>（選填）</span></label>
-    <textarea id="ed-note" rows="3" maxlength="500" placeholder="例如：女方家習慣不收大聘，可以少準備一點。"></textarea>
-    <div class="sheet-actions"><button type="submit" class="button" id="ed-save" value="save">確定</button><button type="button" class="button secondary" id="ed-revert">恢復原本</button></div>
+<div class="toast" id="toast" hidden role="status" aria-live="polite"><span id="toast-text"></span><button type="button" id="toast-undo" class="toast-undo">復原</button></div>
+
+<dialog id="sheet" aria-labelledby="sheet-title">
+  <form id="sheet-form" novalidate>
+    <header class="sheet-head"><h2 id="sheet-title">我有意見</h2><button type="button" class="close" id="sheet-close" aria-label="關閉，不記下">×</button></header>
+    <p class="sheet-phase" id="sheet-context"></p>
+    <div id="sheet-name-field"><label for="sheet-name">是什麼花費？</label><input id="sheet-name" maxlength="40" placeholder="例如：長輩下午茶、媒人禮餅"></div>
+    <fieldset id="sheet-choices" class="choices"><legend>您的看法是？（點一個）</legend><div id="sheet-choice-list" class="choice-list"></div></fieldset>
+    <div id="sheet-amount" class="amount-box">
+      <label for="sheet-amount-input">建議多少錢？</label>
+      <div class="stepper"><button type="button" id="sheet-minus" aria-label="減少">−</button><input id="sheet-amount-input" type="text" inputmode="numeric" autocomplete="off" aria-describedby="sheet-amount-hint"><button type="button" id="sheet-plus" aria-label="增加">＋</button></div>
+      <p class="hint" id="sheet-amount-hint"></p>
+      <div class="presets" id="sheet-presets"></div>
+    </div>
+    <fieldset id="sheet-who" class="choices"><legend>改由誰負擔？</legend><div id="sheet-who-list" class="choice-list"></div></fieldset>
+    <label for="sheet-text" class="gap">想多說一點 <span>（選填）</span></label>
+    <textarea id="sheet-text" rows="3" maxlength="500"></textarea>
+    <p class="hint">不方便打字，可以按鍵盤上的麥克風用說的。</p>
+    <p id="sheet-error" class="error" role="alert"></p>
+    <div class="sheet-actions"><button type="submit" class="button">記下來</button><button type="button" class="button secondary" id="sheet-delete">刪除這則意見</button></div>
   </form>
 </dialog>
 

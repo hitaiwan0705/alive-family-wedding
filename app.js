@@ -1,12 +1,27 @@
 'use strict';
+// 互動層：只負責顯示 content.js 與收集長輩意見。內容（日期、金額、文字）一律由 content.js 提供。
 const data = window.WEDDING;
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const n = document.createElement(tag); if (text !== undefined && text !== null) n.textContent = text; if (className) n.className = className; return n; };
-const PARTIES = Object.keys(data.parties);
-const STORE_KEY = 'alive-wedding-draft-v1';
-const phaseById = Object.fromEntries(data.phases.map(p => [p.id, p]));
+const phases = (data.phases || []).map(p => ({ candidates: [], schedule: [], prepare: [], budget: [], ...p }));
+const PARTIES = Object.keys(data.parties || { groom: '男方', couple: '新人', bride: '女方' });
+const partyName = k => (data.parties || {})[k] || k;
+const STORE_KEY = 'alive-wedding-draft-v2';
+const OLD_STORE_KEY = 'alive-wedding-draft-v1';
+const phaseById = Object.fromEntries(phases.map(p => [p.id, p]));
 const baseItems = {};
-for (const p of data.phases) for (const item of p.budget) baseItems[item.id] = { ...item, phase: p.id };
+for (const p of phases) for (const item of p.budget) baseItems[item.id] = { ...item, phase: p.id };
+
+// ---------- 介面用語（看法選項） ----------
+const KINDS = {
+  date: { label: '日期', button: '對日期有意見', title: '對日期的意見', choices: [['ok', '這天可以'], ['no', '這天不方便'], ['other', '想建議別的日子']], placeholder: '例如：10/25 比較方便，上午出發比較好' },
+  sched: { label: '當天行程', button: '對行程有意見', title: '對當天行程的意見', choices: [['ok', '這樣安排可以'], ['rush', '時間太趕'], ['change', '想加或減某個步驟']], placeholder: '例如：希望先拍長輩合照，大家比較不用久候' },
+  prep: { label: '準備清單', button: '對準備清單有意見', title: '對準備清單的意見', choices: [['ok', '清單沒問題'], ['add', '我想補充一項'], ['who', '分工想調整']], placeholder: '例如：要準備讓長輩休息的椅子' },
+  budget: { label: '預算', button: '我有意見', title: '對這筆花費的意見', choices: [['ok', '金額剛好'], ['less', '太多，可以少一點'], ['more', '不太夠，要多一點'], ['drop', '這項可以不用'], ['who', '想改由誰負擔']] }
+};
+const WHO = [['groom', `${partyName('groom')}全出`, { groom: 100 }], ['couple', `${partyName('couple')}全出`, { couple: 100 }], ['bride', `${partyName('bride')}全出`, { bride: 100 }], ['half', `${partyName('groom')}、${partyName('bride')}各半`, { groom: 50, bride: 50 }], ['other', '其他（請寫在下面）', null]];
+const choiceLabel = (kind, f) => (KINDS[kind].choices.find(c => c[0] === f) || [])[1] || '';
+const whoLabel = w => (WHO.find(x => x[0] === w) || [])[1] || '';
 
 // ---------- 格式 ----------
 const ntd = n => `NT$${Math.round(n).toLocaleString('zh-TW')}`;
@@ -16,38 +31,60 @@ function wan(n) {
   return `${parseFloat((n / 10000).toFixed(2))} 萬`;
 }
 const signedWan = n => (n > 0 ? '多 ' : '少 ') + wan(Math.abs(n));
-const splitText = s => PARTIES.filter(k => s[k]).map(k => `${data.parties[k]} ${s[k]}%`).join('、');
-const sameSplit = (a, b) => PARTIES.every(k => (a[k] || 0) === (b[k] || 0));
+const splitText = s => PARTIES.filter(k => s && s[k]).map(k => `${partyName(k)} ${s[k]}%`).join('、') || '待定';
 const today = new Date();
 const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-// ---------- 草稿（只存在這支手機）與提案連結 ----------
-const emptyDraft = () => ({ e: {}, ad: [], pr: [], d: {}, o: {}, n: '', m: '' });
-const compareOf = pid => phaseById[pid] && phaseById[pid].compare;
-function cleanStr(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
-function cleanAmount(v) { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= 1e8 ? Math.round(n) : undefined; }
-function cleanSplit(s) {
-  if (!s || typeof s !== 'object') return undefined;
-  const out = {}; let total = 0;
-  for (const k of PARTIES) { const v = Number(s[k]); if (Number.isFinite(v) && v > 0 && v <= 100) { out[k] = Math.round(v); total += out[k]; } }
-  return total === 100 ? out : undefined;
+function icon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('class', 'icon');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M4 5h16v11H9l-5 4z'); path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'currentColor'); path.setAttribute('stroke-width', '2'); path.setAttribute('stroke-linejoin', 'round');
+  svg.append(path); return svg;
 }
+
+// ---------- 意見草稿（只存在這支手機）與提案連結 ----------
+// e：預算項目 {f 看法, a 建議金額, w 由誰負擔, t 文字}；ad：新增項目；c：日期／行程／準備清單 {f, t}；o：方案傾向
+const emptyDraft = () => ({ e: {}, ad: [], c: {}, o: {}, n: '', m: '' });
+const cleanStr = (v, max) => typeof v === 'string' ? v.slice(0, max) : '';
+function cleanAmount(v) { const n = Number(v); return v !== '' && v !== null && Number.isFinite(n) && n >= 0 && n <= 1e8 ? Math.round(n) : undefined; }
+const validChoice = (kind, f) => KINDS[kind].choices.some(c => c[0] === f) ? f : undefined;
 function sanitize(raw) {
   const d = emptyDraft();
   if (!raw || typeof raw !== 'object') return d;
   for (const [id, e] of Object.entries(raw.e || {})) {
-    if (!baseItems[id] || baseItems[id].locked || !e || typeof e !== 'object') continue;
-    const x = {}; const a = cleanAmount(e.a); const s = cleanSplit(e.s);
-    if (a !== undefined) x.a = a; if (s) x.s = s; if (e.r) x.r = 1; if (e.c) x.c = cleanStr(e.c, 500);
-    if (Object.keys(x).length) d.e[id] = x;
+    const base = baseItems[id];
+    if (!base || base.locked || !e || typeof e !== 'object') continue;
+    const x = {}; const a = cleanAmount(e.a);
+    x.f = validChoice('budget', e.f) || (e.r ? 'drop' : a !== undefined ? (a < (base.amount || 0) ? 'less' : 'more') : e.s ? 'who' : undefined);
+    if (a !== undefined && (x.f === 'less' || x.f === 'more')) x.a = a;
+    if (x.f === 'who' && WHO.some(w => w[0] === e.w)) x.w = e.w;
+    const t = cleanStr(e.t || e.c, 500).trim(); if (t) x.t = t;
+    if (!x.f) delete x.f;
+    if (x.f || x.t) d.e[id] = x;
   }
   for (const a of Array.isArray(raw.ad) ? raw.ad.slice(0, 40) : []) {
     if (!a || !phaseById[a.p] || !cleanStr(a.nm, 40).trim()) continue;
-    d.ad.push({ id: cleanStr(a.id, 20) || `n${d.ad.length}`, p: a.p, nm: cleanStr(a.nm, 40), a: cleanAmount(a.a) ?? 0, s: cleanSplit(a.s) || { groom: 100 }, c: cleanStr(a.c, 500) });
+    const x = { id: cleanStr(a.id, 20) || `n${d.ad.length}`, p: a.p, nm: cleanStr(a.nm, 40).trim() };
+    const amt = cleanAmount(a.a); if (amt !== undefined) x.a = amt;
+    if (WHO.some(w => w[0] === a.w)) x.w = a.w;
+    const t = cleanStr(a.t || a.c, 500).trim(); if (t) x.t = t;
+    d.ad.push(x);
   }
-  for (const x of Array.isArray(raw.pr) ? raw.pr.slice(0, 40) : []) if (x && phaseById[x.p] && cleanStr(x.x, 100).trim()) d.pr.push({ p: x.p, x: cleanStr(x.x, 100) });
-  for (const [p, t] of Object.entries(raw.d || {})) if (phaseById[p] && cleanStr(t, 100).trim()) d.d[p] = cleanStr(t, 100);
-  for (const [p, id] of Object.entries(raw.o || {})) { const c = compareOf(p); if (c && c.options.some(o => o.id === id)) d.o[p] = id; }
+  for (const [key, v] of Object.entries(raw.c || {})) {
+    const [kind, pid] = key.split(':');
+    if (!KINDS[kind] || kind === 'budget' || !phaseById[pid] || !v || typeof v !== 'object') continue;
+    const x = {}; const f = validChoice(kind, v.f); if (f) x.f = f;
+    const t = cleanStr(v.t, 500).trim(); if (t) x.t = t;
+    if (x.f || x.t) d.c[key] = x;
+  }
+  // 舊版（v1）資料：建議日期、補充準備
+  for (const [p, t] of Object.entries(raw.d || {})) if (phaseById[p] && cleanStr(t, 100).trim()) d.c[`date:${p}`] = { f: 'other', t: cleanStr(t, 100).trim() };
+  for (const x of Array.isArray(raw.pr) ? raw.pr : []) if (x && phaseById[x.p] && cleanStr(x.x, 100).trim()) {
+    const key = `prep:${x.p}`; const prev = d.c[key] ? `${d.c[key].t}；` : '';
+    d.c[key] = { f: 'add', t: (prev + cleanStr(x.x, 100).trim()).slice(0, 500) };
+  }
+  for (const [p, id] of Object.entries(raw.o || {})) { const c = phaseById[p] && phaseById[p].compare; if (c && c.options.some(o => o.id === id)) d.o[p] = id; }
   d.n = cleanStr(raw.n, 40); d.m = cleanStr(raw.m, 2000);
   return d;
 }
@@ -63,103 +100,138 @@ function decode(str) {
 }
 
 let proposal = null;
-if (location.hash.startsWith('#p=')) {
-  try { proposal = decode(location.hash.slice(3)); } catch (_) { proposal = null; }
-}
+if (location.hash.startsWith('#p=')) { try { proposal = decode(location.hash.slice(3)); } catch (_) { proposal = null; } }
 const readOnly = !!proposal;
 let draft = emptyDraft();
 if (readOnly) draft = sanitize(proposal);
 else {
-  try { const saved = localStorage.getItem(STORE_KEY); if (saved) draft = sanitize(JSON.parse(saved)); } catch (_) { /* 無法讀取就從空白開始 */ }
+  try { const saved = localStorage.getItem(STORE_KEY) || localStorage.getItem(OLD_STORE_KEY); if (saved) draft = sanitize(JSON.parse(saved)); } catch (_) { /* 無法讀取就從空白開始 */ }
 }
 function save() {
   if (readOnly) return;
   try { localStorage.setItem(STORE_KEY, JSON.stringify(draft)); } catch (_) { /* 私密瀏覽等情況，只在本次瀏覽有效 */ }
 }
 
-// ---------- 套用修改後的項目 ----------
+// ---------- 套用意見後的項目 ----------
 function effective(item) {
-  const e = draft.e[item.id] || {};
-  return { ...item, amount: e.a ?? item.amount, split: e.s || item.split, removed: !!e.r, comment: e.c || '', edited: !!draft.e[item.id] };
+  const e = draft.e[item.id];
+  if (!e) return { ...item };
+  const who = e.w && WHO.find(w => w[0] === e.w);
+  return { ...item, amount: e.a ?? item.amount, split: (who && who[2]) || item.split, removed: e.f === 'drop', opinion: e };
 }
-function itemsOf(phaseId, useDraft = true) {
-  const base = phaseById[phaseId].budget.map(i => ({ ...i, phase: phaseId }));
-  if (!useDraft) return base.map(i => ({ ...i, split: i.split, removed: false }));
+function itemsOf(pid, useDraft = true) {
+  const base = phaseById[pid].budget.map(i => ({ ...i, phase: pid }));
+  if (!useDraft) return base;
   const list = base.map(effective);
-  for (const a of draft.ad.filter(a => a.p === phaseId)) list.push({ id: a.id, phase: phaseId, name: a.nm, amount: a.a, split: a.s, comment: a.c, added: true, status: '新增建議' });
+  for (const a of draft.ad.filter(a => a.p === pid)) {
+    const who = a.w && WHO.find(w => w[0] === a.w);
+    list.push({ id: a.id, phase: pid, name: a.nm, amount: a.a, split: (who && who[2]) || {}, added: a, status: '家人新增' });
+  }
   return list;
 }
 const counts = i => !i.removed && !i.locked && typeof i.amount === 'number';
 const phaseTotal = (pid, useDraft = true) => itemsOf(pid, useDraft).filter(counts).reduce((s, i) => s + i.amount, 0);
-const grandTotal = (useDraft = true) => data.phases.reduce((s, p) => s + phaseTotal(p.id, useDraft), 0);
+const grandTotal = (useDraft = true) => phases.reduce((s, p) => s + phaseTotal(p.id, useDraft), 0);
 function partyTotals(useDraft = true) {
   const t = Object.fromEntries(PARTIES.map(k => [k, 0]));
-  for (const p of data.phases) for (const i of itemsOf(p.id, useDraft).filter(counts)) for (const k of PARTIES) t[k] += i.amount * (i.split[k] || 0) / 100;
+  for (const p of phases) for (const i of itemsOf(p.id, useDraft).filter(counts)) for (const k of PARTIES) t[k] += i.amount * ((i.split || {})[k] || 0) / 100;
   return t;
 }
 
-// ---------- 修改清單（給新人看的文字） ----------
-function changeLines() {
-  const lines = [];
-  for (const p of data.phases) {
-    if (draft.d[p.id]) lines.push(`【${p.short}】建議日期：${draft.d[p.id]}`);
-    if (draft.o[p.id]) lines.push(`【${p.short}】比較傾向：${p.compare.options.find(o => o.id === draft.o[p.id]).name}`);
-    for (const item of p.budget) {
-      const e = draft.e[item.id]; if (!e) continue;
-      const parts = [];
-      if (e.r) parts.push('建議不需要');
-      if (e.a !== undefined && e.a !== item.amount) parts.push(item.private && item.amount === undefined ? `建議金額 ${ntd(e.a)}` : `金額 ${ntd(item.amount || 0)} → ${ntd(e.a)}`);
-      if (e.s && !sameSplit(e.s, item.split)) parts.push(`負擔改為 ${splitText(e.s)}`);
-      if (e.c) parts.push(`原因：${e.c}`);
-      if (parts.length) lines.push(`【${p.short}】${item.name}：${parts.join('；')}`);
+// ---------- 意見清單（同一份資料給畫面與 LINE 文字） ----------
+function opinionText(kind, o, item) {
+  const parts = [];
+  if (o.f) parts.push(choiceLabel(kind, o.f));
+  if (kind === 'budget' && o.a !== undefined) parts.push(`建議 ${wan(o.a)}`);
+  if (o.w) parts.push(`改成 ${whoLabel(o.w)}`);
+  let s = parts.join('，');
+  if (o.t) s += (s ? '——' : '') + o.t;
+  return s || (item ? '' : '');
+}
+function opinions() {
+  const list = [];
+  for (const p of phases) {
+    for (const kind of ['date', 'sched', 'prep']) {
+      const o = draft.c[`${kind}:${p.id}`];
+      if (o) list.push({ phase: p, label: KINDS[kind].label, text: opinionText(kind, o), open: () => openSheet({ kind, pid: p.id }), remove: () => { delete draft.c[`${kind}:${p.id}`]; } });
     }
-    for (const a of draft.ad.filter(a => a.p === p.id)) lines.push(`【${p.short}】新增預算「${a.nm}」${ntd(a.a)}（${splitText(a.s)}）${a.c ? `；原因：${a.c}` : ''}`);
-    for (const x of draft.pr.filter(x => x.p === p.id)) lines.push(`【${p.short}】補充要準備：${x.x}`);
+    if (draft.o[p.id] && p.compare) {
+      const opt = p.compare.options.find(o => o.id === draft.o[p.id]);
+      list.push({ phase: p, label: '午宴／晚宴', text: `比較傾向 ${opt.name}`, open: () => document.getElementById(`compare-${p.id}`)?.scrollIntoView({ block: 'start' }), remove: () => { delete draft.o[p.id]; } });
+    }
+    for (const item of p.budget) {
+      const o = draft.e[item.id]; if (!o) continue;
+      list.push({ phase: p, label: item.name, text: opinionText('budget', o), open: () => openSheet({ kind: 'budget', pid: p.id, id: item.id }), remove: () => { delete draft.e[item.id]; } });
+    }
+    for (const a of draft.ad.filter(a => a.p === p.id)) {
+      const bits = [a.a !== undefined ? `約 ${wan(a.a)}` : '', a.w ? whoLabel(a.w) : ''].filter(Boolean).join('，');
+      list.push({ phase: p, label: `想加一項：${a.nm}`, text: bits + (a.t ? (bits ? '——' : '') + a.t : ''), open: () => openSheet({ kind: 'add', pid: p.id, id: a.id }), remove: () => { draft.ad = draft.ad.filter(x => x !== a); } });
+    }
   }
-  return lines;
+  return list;
 }
 function proposalUrl() {
-  const payload = { v: 1, ver: data.version, t: isoToday, n: draft.n, m: draft.m, e: draft.e, ad: draft.ad, pr: draft.pr, d: draft.d, o: draft.o };
+  const payload = { v: 2, ver: data.version, t: isoToday, n: draft.n, m: draft.m, e: draft.e, ad: draft.ad, c: draft.c, o: draft.o };
   return `${location.origin}${location.pathname}#p=${encode(payload)}`;
 }
 function feedbackText() {
-  const lines = changeLines();
+  const list = opinions();
   const before = grandTotal(false), after = grandTotal(true);
-  const out = [`婚禮小冊建議（${data.version}）`, `來自：${draft.n.trim() || '未填寫'}`, ''];
-  if (lines.length) { out.push(`我改了 ${lines.length} 個地方：`, ...lines.map(l => `・${l}`), ''); }
-  if (before !== after) out.push(`預算合計：${wan(before)} → ${wan(after)}（${signedWan(after - before)}）`, '');
-  if (draft.m.trim()) out.push(`想說的話：${draft.m.trim()}`, '');
-  if (lines.length) out.push('點開看我改的版本：', proposalUrl(), '');
-  out.push('（這是建議，請新人和兩家討論後再決定是否採納。）');
+  const out = [`婚禮小冊的意見（${data.version}）`, `來自：${draft.n.trim() || '（沒有留名字）'}`, ''];
+  if (list.length) out.push(`我有 ${list.length} 則意見：`, ...list.map((o, i) => `${i + 1}. 【${o.phase.short}】${o.label}：${o.text}`), '');
+  if (before !== after) out.push(`照我的意見，預算合計 ${wan(before)} → ${wan(after)}（${signedWan(after - before)}）`, '');
+  if (draft.m.trim()) out.push(`其他想說的話：${draft.m.trim()}`, '');
+  if (list.length) out.push('（新人用）點開看完整內容：', proposalUrl(), '');
+  out.push('這是我的意見，請新人和兩家討論後再決定。');
   return out.join('\n');
 }
 
-// ---------- 畫面 ----------
-document.title = data.title;
-$('version').textContent = data.version;
-$('updated').textContent = `更新日期：${data.updated.replaceAll('-', ' / ')}`;
-$('notice').textContent = data.notice;
+// ---------- 首頁資訊 ----------
+document.title = data.title || document.title;
+$('version').textContent = data.version || '';
+$('updated').textContent = data.updated ? `更新日期：${data.updated.replaceAll('-', ' / ')}` : '';
+$('notice').textContent = data.notice || '';
 
 function renderNext() {
   const now = new Date(isoToday);
-  const next = data.phases.find(p => new Date(p.target) >= now);
+  const next = phases.find(p => p.target && new Date(p.target) >= now);
   const box = $('next-event'); box.replaceChildren();
   if (!next) return;
   const days = Math.round((new Date(next.target) - now) / 86400000);
-  const confirmed = next.status.includes('已確認') && !next.status.includes('待');
-  box.append(node('span', '下一件事', 'next-label'), node('strong', `${next.label}`), node('span', confirmed ? `${next.when}・還有 ${days} 天` : `建議 ${next.when}・約 ${days} 天後`, 'next-when'));
+  const confirmed = (next.status || '').includes('已確認') && !(next.status || '').includes('待');
+  box.append(node('span', '下一件事', 'next-label'), node('strong', next.label), node('span', confirmed ? `${next.when}・還有 ${days} 天` : `${next.when}（候選）・約 ${days} 天後`, 'next-when'));
 }
 
 function renderRoadmap() {
   const ol = $('roadmap'); ol.replaceChildren();
-  data.phases.forEach((p, i) => {
+  phases.forEach((p, i) => {
     const li = node('li'); const a = node('a'); a.href = `#phase-${p.id}`;
-    a.append(node('span', String(i + 1), 'step-no'), node('strong', p.short), node('span', p.when, 'step-when'), node('span', p.status, 'pill'), node('span', `預算 ${wan(phaseTotal(p.id))}`, 'step-money'));
+    a.append(node('span', String(i + 1), 'step-no'), node('strong', p.short || p.label), node('span', p.when, 'step-when'), node('span', p.status, 'pill'), node('span', `預算 ${wan(phaseTotal(p.id))}`, 'step-money'));
     li.append(a); ol.append(li);
   });
   const nav = $('jump'); nav.replaceChildren();
-  for (const p of data.phases) { const a = node('a', p.short); a.href = `#phase-${p.id}`; nav.append(a); }
-  for (const [href, text] of [['#months', '時間表'], ['#budget', '預算'], ['#feedback', '送出建議']]) { const a = node('a', text); a.href = href; nav.append(a); }
+  for (const p of phases) { const a = node('a', p.short || p.label); a.href = `#phase-${p.id}`; nav.append(a); }
+  for (const [href, text] of [['#months', '時間表'], ['#budget', '預算'], ['#feedback', '傳意見']]) { const a = node('a', text); a.href = href; nav.append(a); }
+}
+
+// ---------- 「我有意見」按鈕與已記下的意見 ----------
+function opinionButton(label, onClick, has, about) {
+  const b = node('button', undefined, `opinion-button${has ? ' has' : ''}`); b.type = 'button';
+  b.append(icon(), node('span', has ? '改我的意見' : label));
+  b.setAttribute('aria-label', `${has ? '修改我對' : '我對'}「${about || label}」${has ? '的意見' : '有意見'}`);
+  b.addEventListener('click', onClick);
+  return b;
+}
+function myNote(text, who = '我的意見') {
+  const p = node('p', undefined, 'mine'); p.append(node('strong', `${readOnly ? '這位家人的意見' : who}：`), document.createTextNode(text));
+  return p;
+}
+function sectionOpinion(kind, pid) {
+  const key = `${kind}:${pid}`; const o = draft.c[key];
+  const wrap = node('div', undefined, 'opinion-slot');
+  if (o) wrap.append(myNote(opinionText(kind, o)));
+  if (!readOnly) wrap.append(opinionButton(KINDS[kind].button, () => openSheet({ kind, pid }), !!o, `${phaseById[pid].short || phaseById[pid].label}的${KINDS[kind].label}`));
+  return wrap.children.length ? wrap : null;
 }
 
 function rangeBar(item) {
@@ -175,141 +247,118 @@ function rangeBar(item) {
 function renderBudgetRow(item) {
   const row = node('article', undefined, 'budget-row');
   if (item.removed) row.classList.add('is-removed');
-  if (item.edited || item.added) row.classList.add('is-changed');
+  if (item.opinion || item.added) row.classList.add('is-changed');
   const head = node('div', undefined, 'budget-head');
-  const title = node('h4', item.name);
-  const tag = item.added ? node('span', '新增建議', 'pill pill-new') : item.removed ? node('span', '建議不需要', 'pill pill-new') : item.edited ? node('span', '已修改', 'pill pill-new') : node('span', item.status, 'pill');
-  head.append(title, tag);
+  head.append(node('h4', item.name), node('span', item.added ? '家人新增' : item.status, item.added ? 'pill pill-new' : 'pill'));
   const money = node('p', undefined, 'money');
-  if (item.locked) money.textContent = '女方家負擔・不列入';
-  else if (typeof item.amount !== 'number') money.textContent = '不列金額';
-  else { money.append(node('strong', wan(item.amount)), node('span', ntd(item.amount), 'ntd')); }
+  if (item.locked) money.textContent = '不列入這份預算';
+  else if (typeof item.amount !== 'number') money.textContent = item.added ? '金額未填' : '不列金額';
+  else money.append(node('strong', wan(item.amount)), node('span', ntd(item.amount), 'ntd'));
   row.append(head, money);
   const base = baseItems[item.id];
-  if (base && item.edited && typeof base.amount === 'number' && item.amount !== base.amount) row.append(node('p', `原本 ${wan(base.amount)}`, 'was'));
-  if (!item.locked && typeof item.amount === 'number') { const bar = rangeBar(item); if (bar) row.append(bar); }
+  if (base && item.opinion && typeof base.amount === 'number' && item.amount !== base.amount) row.append(node('p', `原本 ${wan(base.amount)}`, 'was'));
+  if (!item.locked && typeof item.amount === 'number' && !item.added) { const bar = rangeBar(item); if (bar) row.append(bar); }
   row.append(node('p', `由誰負擔：${splitText(item.split)}`, 'who'));
   if (item.note) row.append(node('p', item.note, 'note'));
-  if (item.comment) row.append(node('p', `我的想法：${item.comment}`, 'mine'));
+  if (item.opinion) row.append(myNote(opinionText('budget', item.opinion)));
+  if (item.added && item.added.t) row.append(myNote(item.added.t));
   if (!readOnly && !item.locked) {
-    const btn = node('button', '修改', 'edit-button'); btn.type = 'button';
-    btn.setAttribute('aria-label', `修改「${item.name}」`);
-    btn.addEventListener('click', () => openEditor(item.phase, item.id));
-    row.append(btn);
+    row.append(opinionButton(item.added ? '修改' : KINDS.budget.button, () => openSheet(item.added ? { kind: 'add', pid: item.phase, id: item.id } : { kind: 'budget', pid: item.phase, id: item.id }), !!(item.opinion || item.added), item.name));
   }
   return row;
 }
 
-const sum = (costs, k) => costs.reduce((s, c) => s + c[k], 0);
+const sum = (costs, k) => costs.reduce((s, c) => s + (c[k] || 0), 0);
 function renderCompare(p) {
   const c = p.compare;
   const box = node('div', undefined, 'compare'); box.id = `compare-${p.id}`;
-  box.append(node('h3', c.title, 'block-title'), node('p', c.intro, 'section-intro'));
-  const base = Math.min(...c.options.map(o => sum(o.costs, 'mid')));
+  box.append(node('h3', c.title, 'block-title'));
+  if (c.intro) box.append(node('p', c.intro, 'section-intro'));
+  const options = c.options || [];
+  const base = Math.min(...options.map(o => sum(o.costs || [], 'mid')));
   const grid = node('div', undefined, 'compare-grid');
-  for (const o of c.options) {
-    const card = node('article', undefined, 'compare-card');
-    if (draft.o[p.id] === o.id) card.classList.add('picked');
+  for (const o of options) {
+    const costs = o.costs || [];
+    const picked = draft.o[p.id] === o.id;
+    const card = node('article', undefined, `compare-card${picked ? ' picked' : ''}`);
     card.append(node('h4', o.name), node('p', o.sub, 'compare-sub'));
-    const mid = sum(o.costs, 'mid');
+    const mid = sum(costs, 'mid');
     const total = node('p', undefined, 'compare-total');
-    total.append(node('span', '多出來約 '), node('strong', wan(mid)), node('span', `（${wan(sum(o.costs, 'low'))}–${wan(sum(o.costs, 'high'))}）`, 'ntd'));
+    total.append(node('span', '多出來約 '), node('strong', wan(mid)), node('span', `（${wan(sum(costs, 'low'))}–${wan(sum(costs, 'high'))}）`, 'ntd'));
     card.append(total);
     if (mid > base) card.append(node('p', `比最省的方案多 ${wan(mid - base)}`, 'compare-delta'));
-    const tl = node('ol', undefined, 'compare-times');
-    for (const [t, what] of o.times) { const li = node('li'); li.append(node('span', t, 'event-time'), node('span', what)); tl.append(li); }
-    card.append(node('p', '時間', 'prep-group'), tl);
-    const ul = node('ul', undefined, 'compare-costs');
-    for (const it of o.costs) {
-      const li = node('li'); li.append(node('span', it.item), node('strong', it.mid ? wan(it.mid) : '不增加'));
-      if (it.src && c.sources[it.src]) li.title = `依據：${c.sources[it.src]}`;
-      ul.append(li);
+    if (o.times && o.times.length) {
+      const tl = node('ol', undefined, 'compare-times');
+      for (const [t, what] of o.times) { const li = node('li'); li.append(node('span', t, 'event-time'), node('span', what)); tl.append(li); }
+      card.append(node('p', '時間', 'prep-group'), tl);
     }
+    const ul = node('ul', undefined, 'compare-costs');
+    for (const it of costs) { const li = node('li'); li.append(node('span', it.item), node('strong', it.mid ? wan(it.mid) : '不增加')); ul.append(li); }
     card.append(node('p', '多出來的費用', 'prep-group'), ul);
-    const pts = node('ul', undefined, 'compare-points'); for (const t of o.points) pts.append(node('li', t)); card.append(pts);
+    if (o.points) { const pts = node('ul', undefined, 'compare-points'); for (const t of o.points) pts.append(node('li', t)); card.append(pts); }
     if (!readOnly) {
-      const btn = node('button', draft.o[p.id] === o.id ? '✓ 我比較傾向這個' : '我比較傾向這個', 'button small secondary pick'); btn.type = 'button';
-      btn.setAttribute('aria-pressed', String(draft.o[p.id] === o.id));
-      btn.addEventListener('click', () => { if (draft.o[p.id] === o.id) delete draft.o[p.id]; else draft.o[p.id] = o.id; save(); renderAll(); document.getElementById(`compare-${p.id}`)?.scrollIntoView({ block: 'start' }); });
+      const btn = node('button', picked ? '✓ 我選這個（再按一下取消）' : '我比較傾向這個', 'button small secondary pick'); btn.type = 'button';
+      btn.setAttribute('aria-pressed', String(picked));
+      btn.addEventListener('click', () => {
+        const before = snapshot();
+        if (picked) delete draft.o[p.id]; else draft.o[p.id] = o.id;
+        commit(picked ? '已取消選擇' : `已記下：比較傾向「${o.name}」`, before, `compare-${p.id}`);
+      });
       card.append(btn);
-    } else if (draft.o[p.id] === o.id) card.append(node('p', '這位家人比較傾向這個', 'pill pill-new'));
+    } else if (picked) card.append(node('p', '這位家人比較傾向這個', 'pill pill-new'));
     grid.append(card);
   }
   box.append(grid);
-  const concl = node('p', undefined, 'tip'); concl.append(node('strong', '婚顧看法　'), document.createTextNode(c.conclusion)); box.append(concl);
-  box.append(node('p', c.unknown, 'planning-note'));
-  const src = node('ul', undefined, 'fine-print'); for (const t of Object.values(c.sources)) src.append(node('li', `依據：${t}`)); box.append(src);
+  if (c.conclusion) { const concl = node('p', undefined, 'tip'); concl.append(node('strong', '婚顧看法　'), document.createTextNode(c.conclusion)); box.append(concl); }
+  if (c.unknown) box.append(node('p', c.unknown, 'planning-note'));
+  if (c.sources) { const src = node('ul', undefined, 'fine-print'); for (const t of Object.values(c.sources)) src.append(node('li', `依據：${t}`)); box.append(src); }
   return box;
 }
 
 function renderPhases() {
   const host = $('phases'); host.replaceChildren();
-  data.phases.forEach((p, idx) => {
+  phases.forEach((p, idx) => {
     const sec = node('section', undefined, 'phase'); sec.id = `phase-${p.id}`; sec.setAttribute('aria-labelledby', `h-${p.id}`);
     const head = node('div', undefined, 'section-head');
     const hgroup = node('div'); hgroup.append(node('p', `0${idx + 2} / 第 ${idx + 1} 件事`, 'eyebrow'));
     const h2 = node('h2', p.label); h2.id = `h-${p.id}`; hgroup.append(h2);
-    head.append(hgroup, node('span', p.status, 'pill'));
+    head.append(hgroup); if (p.status) head.append(node('span', p.status, 'pill'));
     sec.append(head);
 
-    // 日期卡
-    const card = node('div', undefined, 'date-card wide');
+    const card = node('div', undefined, 'date-card wide'); card.id = `date-${p.id}`;
     card.append(node('p', '日期', 'label'), node('h3', p.when, 'when-big'));
     if (p.candidates.length) { const chips = node('div', undefined, 'chips'); for (const c of p.candidates) chips.append(node('span', c, 'chip')); card.append(chips); }
-    card.append(node('p', `地點：${p.place}`, 'detail'), node('p', p.why, 'detail'));
-    const tip = node('p', undefined, 'tip'); tip.append(node('strong', '婚顧提醒　'), document.createTextNode(p.avoid)); card.append(tip);
-    if (!readOnly || draft.d[p.id]) {
-      const lab = node('label', '我建議的日期或時段 '); lab.htmlFor = `date-${p.id}`; lab.append(node('span', '（選填）'));
-      const inp = node('input'); inp.id = `date-${p.id}`; inp.maxLength = 100; inp.placeholder = p.candidates.length ? `例如：${p.candidates[p.candidates.length > 1 ? 1 : 0]} 比較方便` : '例如：上午比較方便'; inp.value = draft.d[p.id] || '';
-      inp.disabled = readOnly;
-      inp.addEventListener('change', () => { const v = inp.value.trim(); if (v) draft.d[p.id] = v; else delete draft.d[p.id]; save(); refreshSummary(); });
-      const wrap = node('div', undefined, 'date-suggest'); wrap.append(lab, inp); card.append(wrap);
-    }
+    if (p.place) card.append(node('p', `地點：${p.place}`, 'detail'));
+    if (p.why) card.append(node('p', p.why, 'detail'));
+    if (p.avoid) { const tip = node('p', undefined, 'tip'); tip.append(node('strong', '婚顧提醒　'), document.createTextNode(p.avoid)); card.append(tip); }
+    const dateOp = sectionOpinion('date', p.id); if (dateOp) card.append(dateOp);
     sec.append(card);
 
-    // 行程與準備
     const grid = node('div', undefined, 'phase-grid');
-    const left = node('div'); left.append(node('h3', '當天行程（示意時間）', 'block-title'));
+    const left = node('div'); left.id = `sched-${p.id}`;
+    left.append(node('h3', '當天行程（示意時間）', 'block-title'));
     const tl = node('ol', undefined, 'timeline');
     for (const s of p.schedule) {
       const li = node('li'); const body = node('div');
-      body.append(node('h4', s.title), node('p', s.detail), node('span', s.who, 'who'));
+      body.append(node('h4', s.title), node('p', s.detail)); if (s.who) body.append(node('span', s.who, 'who'));
       li.append(node('span', s.time, 'event-time'), body); tl.append(li);
     }
     left.append(tl);
     if (p.scheduleNote) left.append(node('p', p.scheduleNote, 'planning-note'));
-    const right = node('div', undefined, 'prepare'); right.append(node('h3', '要準備的東西', 'block-title'));
+    const schedOp = sectionOpinion('sched', p.id); if (schedOp) left.append(schedOp);
+    const right = node('div', undefined, 'prepare'); right.id = `prep-${p.id}`;
+    right.append(node('h3', '要準備的東西', 'block-title'));
     for (const g of p.prepare) {
       right.append(node('h4', g.group, 'prep-group'));
       const ul = node('ul', undefined, 'checklist');
-      for (const it of g.items) { const li = node('li'); li.append(node('span', it.text), node('span', it.who, 'who')); ul.append(li); }
+      for (const it of g.items || []) { const li = node('li'); li.append(node('span', it.text)); if (it.who) li.append(node('span', it.who, 'who')); ul.append(li); }
       right.append(ul);
     }
-    const extra = draft.pr.filter(x => x.p === p.id);
-    if (extra.length) {
-      right.append(node('h4', '家人補充', 'prep-group'));
-      const ul = node('ul', undefined, 'checklist added');
-      for (const x of extra) {
-        const li = node('li'); li.append(node('span', x.x));
-        if (!readOnly) { const del = node('button', '刪除', 'text-button'); del.type = 'button'; del.addEventListener('click', () => { draft.pr.splice(draft.pr.indexOf(x), 1); save(); renderAll(); }); li.append(del); }
-        ul.append(li);
-      }
-      right.append(ul);
-    }
-    if (!readOnly) {
-      const form = node('form', undefined, 'add-prep');
-      const lab = node('label', '補充一項要準備的'); lab.htmlFor = `prep-${p.id}`;
-      const inp = node('input'); inp.id = `prep-${p.id}`; inp.maxLength = 100; inp.placeholder = '例如：準備長輩休息的椅子';
-      const btn = node('button', '加入', 'button small secondary'); btn.type = 'submit';
-      form.append(lab, node('div', undefined, 'inline')); form.lastChild.append(inp, btn);
-      form.addEventListener('submit', ev => { ev.preventDefault(); const v = inp.value.trim(); if (!v) return; draft.pr.push({ p: p.id, x: v }); save(); renderAll(); $(`prep-${p.id}`)?.focus(); });
-      right.append(form);
-    }
+    const prepOp = sectionOpinion('prep', p.id); if (prepOp) right.append(prepOp);
     grid.append(left, right); sec.append(grid);
     if (p.compare) sec.append(renderCompare(p));
 
-    // 預算
-    const bud = node('div', undefined, 'phase-budget');
+    const bud = node('div', undefined, 'phase-budget'); bud.id = `budget-${p.id}`;
     const bh = node('div', undefined, 'budget-title');
     bh.append(node('h3', '這一場的預算', 'block-title'));
     const now = phaseTotal(p.id), was = phaseTotal(p.id, false);
@@ -320,7 +369,7 @@ function renderPhases() {
     for (const item of itemsOf(p.id)) list.append(renderBudgetRow(item));
     if (!list.children.length && p.budgetNote) list.append(node('p', p.budgetNote, 'empty'));
     bud.append(list);
-    if (!readOnly) { const add = node('button', '＋ 新增一項預算', 'button secondary add-item'); add.type = 'button'; add.addEventListener('click', () => openEditor(p.id, null)); bud.append(add); }
+    if (!readOnly) { const add = node('button', '＋ 我想加一項花費', 'button secondary add-item'); add.type = 'button'; add.addEventListener('click', () => openSheet({ kind: 'add', pid: p.id })); bud.append(add); }
     sec.append(bud);
     host.append(sec);
   });
@@ -329,15 +378,16 @@ function renderPhases() {
 function renderMonths() {
   const ol = $('month-list'); ol.replaceChildren();
   const cur = isoToday.slice(0, 7);
-  for (const m of data.months) {
-    const li = node('li', undefined, 'month'); if (m.month === cur) { li.classList.add('current'); li.setAttribute('aria-current', 'date'); }
+  for (const m of data.months || []) {
+    const li = node('li', undefined, 'month');
+    if (m.month === cur) { li.classList.add('current'); li.setAttribute('aria-current', 'date'); }
     if (m.month < cur) li.classList.add('past');
     const [y, mo] = m.month.split('-');
     const head = node('div', undefined, 'month-head'); head.append(node('span', `${y} 年`, 'year'), node('strong', `${Number(mo)} 月`));
     if (m.month === cur) head.append(node('span', '這個月', 'pill pill-new'));
     const body = node('div'); body.append(node('h3', m.focus));
     const ul = node('ul');
-    for (const t of m.tasks) { const it = node('li'); it.append(node('span', t.text), node('span', t.who, 'who')); ul.append(it); }
+    for (const t of m.tasks || []) { const it = node('li'); it.append(node('span', t.text)); if (t.who) it.append(node('span', t.who, 'who')); ul.append(it); }
     body.append(ul); li.append(head, body); ol.append(li);
   }
 }
@@ -360,7 +410,7 @@ function renderSummary() {
   const host = $('budget-summary'); host.replaceChildren();
   const after = grandTotal(true), before = grandTotal(false);
   const tiles = node('div', undefined, 'tiles');
-  const t1 = node('div', undefined, 'tile'); t1.append(node('p', changeLines().length && !readOnly ? '您的版本合計' : readOnly ? '這份建議的合計' : '目前試算合計'), node('strong', wan(after)), node('span', ntd(after), 'ntd'));
+  const t1 = node('div', undefined, 'tile'); t1.append(node('p', after !== before ? (readOnly ? '照這位家人的意見' : '照您的意見') : '目前試算合計'), node('strong', wan(after)), node('span', ntd(after), 'ntd'));
   tiles.append(t1);
   if (after !== before) {
     const t2 = node('div', undefined, 'tile'); t2.append(node('p', '原本試算'), node('strong', wan(before)), node('span', ntd(before), 'ntd'));
@@ -369,150 +419,177 @@ function renderSummary() {
   }
   host.append(tiles);
   const grid = node('div', undefined, 'summary-grid');
-  const a = node('div'); a.append(node('h3', '依四件事分', 'block-title'));
-  a.append(bars(data.phases.map(p => ({ label: p.short, value: phaseTotal(p.id), was: phaseTotal(p.id, false) })), after));
+  const a = node('div'); a.append(node('h3', '依每一件事分', 'block-title'));
+  a.append(bars(phases.map(p => ({ label: p.short || p.label, value: phaseTotal(p.id), was: phaseTotal(p.id, false) })), after));
   const pt = partyTotals(true), pw = partyTotals(false);
   const b = node('div'); b.append(node('h3', '依誰負擔分', 'block-title'));
-  b.append(bars(PARTIES.map(k => ({ label: data.parties[k], value: pt[k], was: pw[k] })), after));
+  b.append(bars(PARTIES.map(k => ({ label: partyName(k), value: pt[k], was: pw[k] })), after));
   grid.append(a, b); host.append(grid);
-  const notes = node('ul', undefined, 'fine-print');
-  for (const t of ['大聘 36 萬退不退、退多少、什麼時候退都還沒談；試算先當作不退回，全額算在支出裡。', '不含女方家主辦的訂婚宴，以及新人自理、不列金額的項目（戒指、媒人與迎娶紅包等）。', '所有金額都是試算，不是正式報價，也還沒有付款；拿到 2027 年正式報價後會更新。']) notes.append(node('li', t));
-  host.append(notes);
+  if (data.budgetNotes && data.budgetNotes.length) { const notes = node('ul', undefined, 'fine-print'); for (const t of data.budgetNotes) notes.append(node('li', t)); host.append(notes); }
 }
 
-function renderChanges() {
-  const ul = $('change-list'); ul.replaceChildren();
-  const lines = changeLines();
-  if (!lines.length) ul.append(node('li', '還沒有修改。可以在上面每一場的預算按「修改」，或補充要準備的東西。', 'empty-line'));
-  for (const l of lines) ul.append(node('li', l));
+// ---------- 傳意見區 ----------
+function renderBasket() {
+  const list = opinions();
+  const ul = $('opinion-list'); ul.replaceChildren();
+  if (!list.length) {
+    const li = node('li', undefined, 'empty-line');
+    li.append(document.createTextNode('還沒有意見。看到想說的地方，按 '), node('span', '我有意見', 'inline-chip'), document.createTextNode(' 就可以。也可以直接在下面寫。'));
+    ul.append(li);
+  }
+  list.forEach((o, i) => {
+    const li = node('li', undefined, 'opinion-item');
+    const body = node('div'); body.append(node('span', `${i + 1}. 【${o.phase.short || o.phase.label}】${o.label}`, 'opinion-label'), node('span', o.text, 'opinion-text'));
+    li.append(body);
+    if (!readOnly) {
+      const acts = node('div', undefined, 'opinion-actions');
+      const edit = node('button', '修改', 'text-button strong'); edit.type = 'button'; edit.addEventListener('click', o.open);
+      const del = node('button', '刪除', 'text-button'); del.type = 'button';
+      del.addEventListener('click', () => { const before = snapshot(); o.remove(); commit('已刪除這則意見', before, 'feedback'); });
+      acts.append(edit, del); li.append(acts);
+    }
+    ul.append(li);
+  });
+  const count = list.length + (draft.m.trim() ? 1 : 0);
+  $('opinion-count').textContent = list.length ? `共 ${list.length} 則` : '';
   const dock = $('dock');
-  dock.hidden = readOnly || !lines.length;
-  $('dock-text').textContent = `您有 ${lines.length} 項建議還沒送出`;
+  dock.hidden = readOnly || !count;
+  $('dock-text').textContent = `已記下 ${count} 則意見，還沒傳出`;
   const text = feedbackText();
   $('line-button').href = `https://line.me/R/share?text=${encodeURIComponent(text)}`;
   const mail = data.feedback && /^[^\s@?&#]+@[^\s@?&#]+\.[^\s@?&#]+$/.test(data.feedback.email || '') ? data.feedback.email : '';
   $('email-button').hidden = !mail;
-  if (mail) $('email-button').href = `mailto:${mail}?subject=${encodeURIComponent(`婚禮小冊建議${draft.n.trim() ? `：${draft.n.trim()}` : ''}`)}&body=${encodeURIComponent(text)}`;
+  if (mail) $('email-button').href = `mailto:${mail}?subject=${encodeURIComponent(`婚禮小冊的意見${draft.n.trim() ? `：${draft.n.trim()}` : ''}`)}&body=${encodeURIComponent(text)}`;
+  $('send-area').classList.toggle('ready', !!count);
 }
 
-function refreshSummary() { renderRoadmap(); renderSummary(); renderChanges(); }
-function renderAll() { renderNext(); renderPhases(); refreshSummary(); }
+function renderAll() { renderNext(); renderRoadmap(); renderPhases(); renderSummary(); renderBasket(); }
 
-for (const q of data.questions) $('questions').append(node('li', q));
-for (const item of data.decisions) {
-  const row = node('article', undefined, 'decision'); const time = node('time', item.date); time.dateTime = item.date;
-  row.append(time, node('h3', item.title), node('p', item.detail)); $('decisions').append(row);
+// ---------- 復原與提示 ----------
+const snapshot = () => JSON.stringify(draft);
+let toastTimer;
+function toast(message, before) {
+  const t = $('toast'); $('toast-text').textContent = message;
+  const undo = $('toast-undo'); undo.hidden = !before;
+  undo.onclick = () => { draft = sanitize(JSON.parse(before)); save(); renderAll(); toast('已復原'); };
+  t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 7000);
 }
-for (const s of data.sources) { const li = node('li'); const a = node('a', s.title); a.href = s.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; li.append(a); $('sources').append(li); }
+function commit(message, before, focusId) {
+  save(); renderAll(); toast(message, before);
+  if (focusId) document.getElementById(focusId)?.scrollIntoView({ block: 'nearest' });
+}
 
-// ---------- 修改視窗 ----------
-const dlg = $('editor');
-let editing = null; // { phase, id|null, split }
-function parseAmount(v) { const n = Number(String(v).replace(/[^\d]/g, '')); return Number.isFinite(n) ? Math.min(n, 1e8) : 0; }
-function stepOf(n) { return n >= 100000 ? 10000 : n >= 10000 ? 1000 : 500; }
-function updateAmountHint() { const n = parseAmount($('ed-amount').value); $('ed-amount-hint').textContent = `＝ ${wan(n)}`; renderSplit(); }
-function rebalance(split, key, value) {
-  const others = PARTIES.filter(k => k !== key);
-  const rest = 100 - value; const cur = others.reduce((s, k) => s + (split[k] || 0), 0);
-  const out = { [key]: value };
-  if (cur === 0) others.forEach((k, i) => { out[k] = i === 0 ? rest : 0; });
-  else { let used = 0; others.forEach((k, i) => { const v = i === others.length - 1 ? rest - used : Math.round((split[k] || 0) / cur * rest / 5) * 5; out[k] = Math.max(0, v); used += out[k]; }); }
-  return out;
-}
-function renderSplit() {
-  const host = $('ed-split'); host.replaceChildren();
-  const amount = parseAmount($('ed-amount').value);
-  for (const k of PARTIES) {
-    const row = node('div', undefined, 'split-row');
-    const id = `sp-${k}`;
-    const lab = node('label', data.parties[k]); lab.htmlFor = id;
-    const out = node('output', `${editing.split[k] || 0}%`); out.htmlFor = id;
-    const range = node('input'); range.type = 'range'; range.id = id; range.min = 0; range.max = 100; range.step = 5; range.value = editing.split[k] || 0;
-    range.addEventListener('input', () => { editing.split = rebalance(editing.split, k, Number(range.value)); renderSplit(); $(`sp-${k}`).focus(); });
-    const money = node('span', amount ? wan(amount * (editing.split[k] || 0) / 100) : '', 'split-money');
-    const top = node('div', undefined, 'split-top'); top.append(lab, out, money);
-    row.append(top, range); host.append(row);
+// ---------- 意見視窗 ----------
+const sheet = $('sheet');
+let ctx = null; // { kind, pid, id }
+function radioGroup(host, name, options, value, onChange) {
+  host.replaceChildren();
+  for (const [v, label] of options) {
+    const lab = node('label', undefined, 'choice');
+    const inp = node('input'); inp.type = 'radio'; inp.name = name; inp.value = v; inp.checked = v === value;
+    inp.addEventListener('change', () => onChange(v));
+    lab.append(inp, node('span', label)); host.append(lab);
   }
 }
-function openEditor(phaseId, itemId) {
-  const phase = phaseById[phaseId];
-  const added = itemId ? draft.ad.find(a => a.id === itemId) : null;
-  const base = itemId && !added ? baseItems[itemId] : null;
-  const eff = base ? effective(base) : null;
-  editing = { phase: phaseId, id: itemId, added: !!added || !itemId, split: { ...((added && added.s) || (eff && eff.split) || phase.budget[0].split) } };
-  $('editor-title').textContent = itemId ? `修改：${added ? added.nm : base.name}` : '新增一項預算';
-  $('editor-phase').textContent = `${phase.label}・${phase.when}`;
-  $('name-field').hidden = !editing.added;
-  $('ed-name').value = added ? added.nm : '';
-  const amt = added ? added.a : eff && typeof eff.amount === 'number' ? eff.amount : 0;
-  $('ed-amount').value = amt ? amt.toLocaleString('zh-TW') : '';
-  $('ed-note').value = added ? added.c : eff ? eff.comment : '';
-  $('remove-field').hidden = !base; $('ed-remove').checked = !!(eff && eff.removed);
-  $('ed-revert').textContent = added ? '刪除這項' : '恢復原本';
-  $('ed-revert').hidden = !itemId;
-  const presets = $('ed-presets'); presets.replaceChildren();
-  if (base && typeof base.low === 'number' && base.high > base.low) {
-    for (const [label, v] of [['低標', base.low], ['原本試算', base.amount], ['高標', base.high]]) {
-      const b = node('button', `${label} ${wan(v)}`, 'chip-button'); b.type = 'button';
-      b.addEventListener('click', () => { $('ed-amount').value = v.toLocaleString('zh-TW'); updateAmountHint(); });
-      presets.append(b);
+const parseAmount = v => { const s = String(v).replace(/[^\d]/g, ''); return s ? Math.min(Number(s), 1e8) : undefined; };
+const stepOf = n => n >= 100000 ? 10000 : n >= 10000 ? 1000 : 500;
+function setAmount(n) { $('sheet-amount-input').value = n === undefined ? '' : n.toLocaleString('zh-TW'); $('sheet-amount-hint').textContent = n === undefined ? '不確定可以不填' : `＝ ${wan(n)}`; }
+function syncSheet() {
+  const f = ctx.f;
+  const showAmount = ctx.kind === 'add' || (ctx.kind === 'budget' && (f === 'less' || f === 'more'));
+  const showWho = ctx.kind === 'add' || (ctx.kind === 'budget' && f === 'who');
+  $('sheet-amount').hidden = !showAmount;
+  $('sheet-who').hidden = !showWho;
+  $('sheet-error').textContent = '';
+}
+function openSheet(target) {
+  if (readOnly) return;
+  const p = phaseById[target.pid];
+  ctx = { ...target };
+  let existing = null; let item = null;
+  if (target.kind === 'budget') { item = baseItems[target.id]; existing = draft.e[target.id]; }
+  else if (target.kind === 'add') existing = target.id ? draft.ad.find(a => a.id === target.id) : null;
+  else existing = draft.c[`${target.kind}:${target.pid}`];
+  ctx.f = existing && existing.f; ctx.w = existing && existing.w;
+
+  $('sheet-title').textContent = target.kind === 'add' ? '我想加一項花費' : KINDS[target.kind].title;
+  const where = [p.label];
+  if (item) where.push(item.name, typeof item.amount === 'number' ? `目前 ${wan(item.amount)}` : '');
+  else if (target.kind === 'date') where.push(p.when);
+  $('sheet-context').textContent = where.filter(Boolean).join('・');
+  $('sheet-name-field').hidden = target.kind !== 'add';
+  $('sheet-name').value = target.kind === 'add' && existing ? existing.nm : '';
+  $('sheet-choices').hidden = target.kind === 'add';
+  if (target.kind !== 'add') radioGroup($('sheet-choice-list'), 'feel', KINDS[target.kind].choices, ctx.f, v => { ctx.f = v; if ((v === 'less' || v === 'more') && item && $('sheet-amount-input').value === '' && typeof item.amount === 'number') setAmount(item.amount); syncSheet(); });
+  radioGroup($('sheet-who-list'), 'who', WHO.map(w => [w[0], w[1]]), ctx.w, v => { ctx.w = v; });
+  setAmount(existing && existing.a !== undefined ? existing.a : undefined);
+  const presets = $('sheet-presets'); presets.replaceChildren();
+  if (item && typeof item.low === 'number' && item.high > item.low) {
+    for (const [label, v] of [['低標', item.low], ['原本', item.amount], ['高標', item.high]]) {
+      const b = node('button', `${label} ${wan(v)}`, 'chip-button'); b.type = 'button'; b.addEventListener('click', () => setAmount(v)); presets.append(b);
     }
   }
-  updateAmountHint();
-  if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
-  (editing.added && !itemId ? $('ed-name') : $('ed-amount')).focus();
+  $('sheet-text').value = existing ? existing.t || '' : '';
+  $('sheet-text').placeholder = target.kind === 'add' ? '例如：長輩休息室的下午茶' : KINDS[target.kind].placeholder || '想到什麼都可以寫';
+  $('sheet-delete').hidden = !existing;
+  syncSheet();
+  if (typeof sheet.showModal === 'function') sheet.showModal(); else sheet.setAttribute('open', '');
+  (target.kind === 'add' ? $('sheet-name') : sheet.querySelector('input[name=feel]')).focus();
 }
-function closeEditor() { if (typeof dlg.close === 'function') dlg.close(); else dlg.removeAttribute('open'); }
-$('ed-amount').addEventListener('input', updateAmountHint);
-$('ed-amount').addEventListener('blur', () => { const n = parseAmount($('ed-amount').value); $('ed-amount').value = n ? n.toLocaleString('zh-TW') : ''; });
-for (const [id, dir] of [['ed-minus', -1], ['ed-plus', 1]]) $(id).addEventListener('click', () => {
-  const n = parseAmount($('ed-amount').value); const step = stepOf(dir < 0 ? Math.max(n - 1, 0) : n);
-  $('ed-amount').value = Math.max(0, n + dir * step).toLocaleString('zh-TW'); updateAmountHint();
+function closeSheet() { if (typeof sheet.close === 'function') sheet.close(); else sheet.removeAttribute('open'); }
+$('sheet-amount-input').addEventListener('input', () => { const n = parseAmount($('sheet-amount-input').value); $('sheet-amount-hint').textContent = n === undefined ? '不確定可以不填' : `＝ ${wan(n)}`; });
+$('sheet-amount-input').addEventListener('blur', () => setAmount(parseAmount($('sheet-amount-input').value)));
+for (const [id, dir] of [['sheet-minus', -1], ['sheet-plus', 1]]) $(id).addEventListener('click', () => {
+  const n = parseAmount($('sheet-amount-input').value) || 0;
+  setAmount(Math.max(0, n + dir * stepOf(dir < 0 ? Math.max(n - 1, 0) : n)));
 });
-$('editor-close').addEventListener('click', closeEditor);
-$('ed-revert').addEventListener('click', () => {
-  if (!editing) return;
-  if (editing.added) draft.ad = draft.ad.filter(a => a.id !== editing.id); else delete draft.e[editing.id];
-  save(); closeEditor(); renderAll();
+$('sheet-close').addEventListener('click', closeSheet);
+sheet.addEventListener('click', ev => { if (ev.target === sheet) closeSheet(); });
+$('sheet-delete').addEventListener('click', () => {
+  const before = snapshot();
+  if (ctx.kind === 'budget') delete draft.e[ctx.id];
+  else if (ctx.kind === 'add') draft.ad = draft.ad.filter(a => a.id !== ctx.id);
+  else delete draft.c[`${ctx.kind}:${ctx.pid}`];
+  closeSheet(); commit('已刪除這則意見', before);
 });
-$('editor-form').addEventListener('submit', ev => {
+$('sheet-form').addEventListener('submit', ev => {
   ev.preventDefault();
-  const amount = parseAmount($('ed-amount').value);
-  const note = $('ed-note').value.trim().slice(0, 500);
-  const split = cleanSplit(editing.split) || { groom: 100 };
-  if (editing.added) {
-    const name = $('ed-name').value.trim().slice(0, 40);
-    if (!name) { $('ed-name').setCustomValidity('請寫項目名稱'); $('ed-name').reportValidity(); return; }
-    if (editing.id) Object.assign(draft.ad.find(a => a.id === editing.id), { nm: name, a: amount, s: split, c: note });
-    else draft.ad.push({ id: `n${Date.now().toString(36)}`, p: editing.phase, nm: name, a: amount, s: split, c: note });
+  const text = $('sheet-text').value.trim().slice(0, 500);
+  const amount = parseAmount($('sheet-amount-input').value);
+  const before = snapshot();
+  let anchor;
+  if (ctx.kind === 'add') {
+    const name = $('sheet-name').value.trim().slice(0, 40);
+    if (!name) { $('sheet-error').textContent = '請寫一下是什麼花費，例如「長輩下午茶」。'; $('sheet-name').focus(); return; }
+    const x = { id: ctx.id || `n${Date.now().toString(36)}`, p: ctx.pid, nm: name };
+    if (amount !== undefined) x.a = amount; if (ctx.w) x.w = ctx.w; if (text) x.t = text;
+    const i = draft.ad.findIndex(a => a.id === x.id); if (i >= 0) draft.ad[i] = x; else draft.ad.push(x);
+    anchor = `budget-${ctx.pid}`;
   } else {
-    const base = baseItems[editing.id]; const e = {};
-    const baseAmount = typeof base.amount === 'number' ? base.amount : undefined;
-    if ($('ed-amount').value.trim() !== '' && amount !== baseAmount) e.a = amount;
-    if (!sameSplit(split, base.split)) e.s = split;
-    if ($('ed-remove').checked) e.r = 1;
-    if (note) e.c = note;
-    if (Object.keys(e).length) draft.e[editing.id] = e; else delete draft.e[editing.id];
+    if (!ctx.f && !text) { $('sheet-error').textContent = '請點一個看法，或寫幾個字都可以。'; return; }
+    const x = {}; if (ctx.f) x.f = ctx.f; if (text) x.t = text;
+    if (ctx.kind === 'budget') {
+      const base = baseItems[ctx.id];
+      if ((x.f === 'less' || x.f === 'more') && amount !== undefined && amount !== base.amount) x.a = amount;
+      if (x.f === 'who' && ctx.w) x.w = ctx.w;
+      draft.e[ctx.id] = x; anchor = `budget-${ctx.pid}`;
+    } else { draft.c[`${ctx.kind}:${ctx.pid}`] = x; anchor = `${ctx.kind}-${ctx.pid}`; }
   }
-  const target = editing.phase;
-  save(); closeEditor(); renderAll();
-  document.getElementById(`phase-${target}`)?.querySelector('.phase-budget')?.scrollIntoView({ block: 'start' });
+  closeSheet(); commit('已記下您的意見（還沒傳出）', before, anchor);
 });
-$('ed-name').addEventListener('input', () => $('ed-name').setCustomValidity(''));
-dlg.addEventListener('click', ev => { if (ev.target === dlg) closeEditor(); });
 
 // ---------- 送出 ----------
 $('name').value = draft.n; $('message').value = draft.m;
-$('name').addEventListener('input', () => { draft.n = $('name').value.slice(0, 40); save(); renderChanges(); });
-$('message').addEventListener('input', () => { draft.m = $('message').value.slice(0, 2000); save(); renderChanges(); });
+$('name').addEventListener('input', () => { draft.n = $('name').value.slice(0, 40); save(); renderBasket(); });
+$('message').addEventListener('input', () => { draft.m = $('message').value.slice(0, 2000); save(); renderBasket(); });
 function nothingToSend(ev) {
-  if (changeLines().length || draft.m.trim()) return false;
+  if (opinions().length || draft.m.trim()) return false;
   ev.preventDefault();
-  $('feedback-status').textContent = '還沒有任何修改或想說的話。可以先在上面修改，或在「還想說的話」寫下來。';
+  $('feedback-status').textContent = '還沒有任何意見。可以先在上面按「我有意見」，或在「其他想說的話」寫下來。';
   return true;
 }
-$('line-button').addEventListener('click', ev => { if (!nothingToSend(ev)) $('feedback-status').textContent = '正在開啟 LINE。請選擇新人或家族群組，再按「傳送」才會送出。'; });
-$('email-button').addEventListener('click', ev => { if (!nothingToSend(ev)) $('feedback-status').textContent = '正在開啟郵件程式。請在郵件程式按「寄出」才會送達；沒有開啟的話，請改用 LINE 或複製文字。'; });
+$('line-button').addEventListener('click', ev => { if (!nothingToSend(ev)) $('feedback-status').textContent = '正在開啟 LINE：請選新人（或家族群組），再按「傳送」。傳完後，可以按最下面的「清空，重新開始」。'; });
+$('email-button').addEventListener('click', ev => { if (!nothingToSend(ev)) $('feedback-status').textContent = '正在開啟郵件程式，請按「寄出」才會送到。沒有開啟的話，請改用 LINE 或複製文字。'; });
 $('copy-button').addEventListener('click', async ev => {
   if (nothingToSend(ev)) return;
   const text = feedbackText();
@@ -520,31 +597,35 @@ $('copy-button').addEventListener('click', async ev => {
     if (!navigator.clipboard) throw new Error('no clipboard');
     await navigator.clipboard.writeText(text);
     $('manual-copy').hidden = true;
-    $('feedback-status').textContent = '已複製，還沒有傳送。請貼到 LINE 或訊息中傳給新人。';
+    $('feedback-status').textContent = '已複製，還沒有傳出。請到 LINE 或訊息裡「貼上」，傳給新人。';
   } catch (_) {
     $('manual-copy').hidden = false; $('copy-text').value = text; $('copy-text').focus(); $('copy-text').select();
-    $('feedback-status').textContent = '無法自動複製，請複製下方文字後傳給新人。尚未傳送。';
+    $('feedback-status').textContent = '無法自動複製，請長按下方文字、全選後複製。還沒有傳出。';
   }
 });
 $('reset-draft').addEventListener('click', () => {
-  if (!confirm('確定要清除您在這支手機上的所有修改嗎？')) return;
-  draft = emptyDraft(); save(); $('name').value = ''; $('message').value = ''; $('feedback-status').textContent = '已清除，回到原本的版本。'; renderAll();
+  if (!confirm('確定要清空這支手機上的所有意見嗎？（已經傳出的不受影響）')) return;
+  const before = snapshot();
+  draft = { ...emptyDraft(), n: draft.n }; save(); $('message').value = '';
+  $('feedback-status').textContent = '';
+  renderAll(); toast('已清空，可以重新開始', before);
 });
+$('dock-go').addEventListener('click', () => { $('feedback').scrollIntoView({ block: 'start' }); $('feedback-title').focus({ preventScroll: true }); });
 
-// ---------- 提案檢視（新人點開長輩傳來的連結） ----------
+// ---------- 新人點開長輩傳來的連結 ----------
 if (readOnly) {
   document.body.classList.add('read-only');
   $('proposal-banner').hidden = false;
-  $('proposal-title').textContent = `${draft.n.trim() || '家人'}的建議（尚未採納）`;
+  $('proposal-title').textContent = `${draft.n.trim() || '家人'}的意見（尚未採納）`;
   const when = typeof proposal.t === 'string' ? proposal.t.slice(0, 10) : '';
   const ver = typeof proposal.ver === 'string' ? proposal.ver.slice(0, 40) : '';
-  $('proposal-meta').textContent = `${when ? `${when} 提出・` : ''}根據「${ver || '未知版本'}」修改。標示「已修改／新增建議」的地方就是這位家人的意見。${ver && ver !== data.version ? '（注意：正式版本已更新，部分內容可能不同。）' : ''}`;
-  $('feedback-title').textContent = '這份建議改了哪些地方';
+  $('proposal-meta').textContent = `${when ? `${when} 傳來・` : ''}看的是「${ver || '未知版本'}」。底色標示的地方就是這位家人的意見。${ver && ver !== data.version ? '（正式版本已更新，部分內容可能不同。）' : ''}`;
+  $('feedback-title').textContent = '這位家人的意見';
   $('name').disabled = true; $('message').disabled = true;
   $('copy-json').addEventListener('click', async () => {
-    const json = JSON.stringify({ from: draft.n, date: when, baseVersion: ver, message: draft.m, edits: draft.e, added: draft.ad, prepare: draft.pr, dates: draft.d, prefer: draft.o }, null, 2);
+    const json = JSON.stringify({ from: draft.n, date: when, baseVersion: ver, message: draft.m, budget: draft.e, added: draft.ad, sections: draft.c, prefer: draft.o, readable: opinions().map(o => `【${o.phase.short}】${o.label}：${o.text}`) }, null, 2);
     try { await navigator.clipboard.writeText(json); $('copy-json').textContent = '已複製'; }
-    catch (_) { $('manual-copy').hidden = false; $('copy-text').value = json; $('copy-text').select(); location.hash = 'feedback'; }
+    catch (_) { $('manual-copy').hidden = false; $('copy-text').value = json; $('copy-text').select(); $('feedback').scrollIntoView(); }
   });
 }
 
@@ -552,7 +633,16 @@ $('font').addEventListener('click', () => {
   const large = document.documentElement.classList.toggle('large-text');
   $('font').setAttribute('aria-pressed', String(large));
   $('font').textContent = large ? '恢復原本字級' : '字再大一點';
+  try { localStorage.setItem('alive-wedding-large', large ? '1' : ''); } catch (_) { /* 忽略 */ }
 });
+try { if (localStorage.getItem('alive-wedding-large')) $('font').click(); } catch (_) { /* 忽略 */ }
 $('print').addEventListener('click', () => window.print());
 
+for (const q of data.questions || []) $('questions').append(node('li', q));
+for (const item of data.decisions || []) {
+  const row = node('article', undefined, 'decision'); const time = node('time', item.date); time.dateTime = item.date;
+  row.append(time, node('h3', item.title), node('p', item.detail)); $('decisions').append(row);
+}
+for (const s of data.sources || []) { const li = node('li'); const a = node('a', s.title); a.href = s.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; li.append(a); $('sources').append(li); }
+renderMonths();
 renderAll();
