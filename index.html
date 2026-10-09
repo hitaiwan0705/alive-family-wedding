@@ -1,24 +1,143 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="給家人的婚禮準備小冊：重要日期、當天流程、工作分工與意見回饋。">
-<meta name="theme-color" content="#713b43"><title>給家人的婚禮小冊｜提親・訂婚・結婚</title>
-<link rel="stylesheet" href="styles.css"><script src="content.js" defer></script><script src="app.js" defer></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="給家人的婚禮準備小冊：提親、登記、訂婚、結婚的日期、行程、準備項目與預算，可以直接留下意見。">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#713b43"><title>給家人的婚禮小冊</title>
+<link rel="stylesheet" href="styles.css"><script src="config.js" defer></script><script src="content.js" defer></script><script src="app.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">跳到婚禮安排</a>
-<header class="top"><a class="brand" href="#"><span aria-hidden="true">囍</span> 給家人的婚禮小冊</a><div class="tools"><button id="font" type="button" aria-pressed="false">字再大一點</button><button id="print" type="button">列印留存</button></div></header>
+<header class="top"><a class="brand" href="#"><span aria-hidden="true">囍</span> 給家人的婚禮小冊</a><div class="tools"><button id="focus-toggle" type="button" aria-pressed="false">只看要表態的</button><button id="font" type="button" aria-pressed="false">字再大一點</button><button id="print" type="button">列印留存</button></div></header>
+
+<div id="proposal-banner" class="proposal-banner" hidden role="region" aria-label="提案檢視">
+  <div><strong id="proposal-title">這是一份家人的建議</strong><p id="proposal-meta"></p></div>
+  <div class="banner-actions"><button id="copy-json" class="button small" type="button">複製提案資料</button><a class="button small secondary" href="./">回到正式版本</a></div>
+</div>
+
 <main id="main">
-<section class="hero" aria-labelledby="title"><div class="hero-copy"><p class="eyebrow">有你們的祝福，就是好日子</p><h1 id="title">我們的婚禮，<br>一起準備。</h1><p class="intro">把日子安排好，把家人照顧好。<br>重要的事都放在這一頁，慢慢看、一起聊。</p><div class="meta"><span id="version"></span><span id="updated"></span></div><a class="button" href="#feedback">我有想法想說 <span aria-hidden="true">↗</span></a></div><div class="seal" aria-hidden="true"><div class="seal-inner"><span>兩家人</span><strong>囍</strong><span>一件喜事</span></div><p>好好商量・好好準備</p></div></section>
-<nav class="jump" aria-label="本頁內容"><a href="#dates">重要日期</a><a href="#schedule">當天流程</a><a href="#tasks">準備分工</a><a href="#feedback">留下想法</a></nav>
+<section class="hero" aria-labelledby="title">
+  <div class="hero-copy">
+    <p class="eyebrow">有你們的祝福，就是好日子</p>
+    <h1 id="title">提親到婚宴，<br>一頁看清楚。</h1>
+    <p class="intro">日期、當天行程、要準備的東西、要花多少錢，都在這一頁，兩家看到的是同一份。<br>有想法不用打電話，在這一頁點一點，就能傳給新人。</p>
+    <div class="meta"><span id="version"></span><span id="updated"></span></div>
+    <div class="next" id="next-event" aria-live="polite"></div>
+  </div>
+  <div class="seal" aria-hidden="true"><div class="seal-inner"><span>兩家人</span><strong>囍</strong><span>一件喜事</span></div><p>好好商量・好好準備</p></div>
+</section>
+
 <aside class="notice"><strong>先跟大家說一聲</strong><p id="notice"></p></aside>
-<section id="dates"><div class="section-head"><div><p class="eyebrow">01 / 先記住這些</p><h2>重要日期與地點</h2></div><span class="small-note">定案後會更新在這裡</span></div><div class="date-grid" id="date-cards"></div></section>
-<section id="schedule"><div class="section-head"><div><p class="eyebrow">02 / 每一場，好好準備</p><h2>提親到婚宴，怎麼走</h2></div><span class="pill">流程草案・時辰待確認</span></div><p class="section-intro">登記日已定，其他場合仍在討論。選一場看流程；順序與細節會依兩家共識調整。</p><div class="event-buttons" id="event-buttons" role="group" aria-label="選擇要看的場合"></div><p id="event-intro" class="planning-note"></p><ol class="timeline" id="timeline"></ol><p class="planning-note">交通提醒：彰化迎娶與台北宴客需另留實際車程、上下車與休息緩衝。先確認迎娶時辰與回程需求，再決定午宴或晚宴，不套用同一場地的時間表。</p></section>
-<section id="tasks"><div class="section-head"><div><p class="eyebrow">03 / 一起分擔，不必一個人忙</p><h2>什麼時候，準備什麼</h2></div></div><p class="section-intro">這是建議分工。人選與內容會先商量，確認後才請大家幫忙。</p><div id="task-list" class="task-list"></div></section>
-<section class="discussion" id="discussion"><div><p class="eyebrow">04 / 想先聽聽大家的想法</p><h2>這三件事，<br>一起商量。</h2><p>不用一次決定所有細節。<br>先把在意的事告訴我們就好。</p></div><ol id="questions"></ol></section>
-<section id="feedback"><div class="section-head"><div><p class="eyebrow">05 / 每個想法，都會好好看</p><h2>有話想說，留在這裡</h2></div></div><p class="section-intro">建議會先由新人整理與討論。採納後，才更新上面的安排，並在下方說明。</p><div class="feedback-grid"><form id="feedback-form"><div class="field-row"><div><label for="name">怎麼稱呼您 <span>（選填）</span></label><input id="name" name="name" autocomplete="name" maxlength="60" placeholder="例如：大姑、舅舅"></div><div><label for="topic">想討論哪件事</label><select id="topic" name="topic"><option>提親日期與安排</option><option>登記與證人</option><option>訂婚日期與儀式</option><option>迎娶與台北婚宴</option><option>當天流程與習俗</option><option>工作分工</option><option>交通、餐點與照顧需求</option><option>其他祝福與想法</option></select></div></div><label for="message">您的想法 <span>（必填）</span></label><textarea id="message" name="message" required maxlength="3000" rows="5" placeholder="例如：希望先拍長輩合照，大家比較不用久候。" aria-describedby="feedback-help feedback-status"></textarea><p id="feedback-help" class="help"></p><div class="form-actions"><button id="email-button" class="button" type="submit" hidden>用 Email 寄出想法</button><button id="copy-button" class="button secondary" type="button">複製想法，傳給新人</button></div><a id="form-link" class="form-link" hidden target="_blank" rel="noopener noreferrer">開啟回饋表單（新視窗） ↗</a><p id="feedback-status" role="status" class="status"></p><div id="manual-copy" hidden><label for="copy-text">請長按或選取下方文字後複製</label><textarea id="copy-text" readonly rows="8"></textarea></div></form><aside class="feedback-note"><span aria-hidden="true">♡</span><h3>先聽想法，再做決定</h3><ol><li>家人提出建議</li><li>新人彙整、和兩家討論</li><li>決定是否採納</li><li>更新這一頁，讓大家知道</li></ol><p>不方便打字，也可以請家人代寫。送出建議不代表安排已經改動。</p></aside></div></section>
-<section id="updates"><div class="section-head"><div><p class="eyebrow">06 / 大家都能跟上進度</p><h2>最近確認了什麼</h2></div></div><div id="decisions"></div></section>
+
+<section class="howto" aria-labelledby="howto-title">
+  <h2 id="howto-title">怎麼留意見？三個步驟</h2>
+  <ol>
+    <li><span class="howto-no">1</span><div><strong>看到想說的地方</strong><p>按旁邊的 <span class="inline-chip">我有意見</span></p></div></li>
+    <li><span class="howto-no">2</span><div><strong>點一個看法</strong><p>例如「太多了」「這天不方便」。想多說可以打字，或按鍵盤上的麥克風用說的。</p></div></li>
+    <li><span class="howto-no">3</span><div><strong id="howto-send-title">用 LINE 傳給新人</strong><p id="howto-send-text">全部看完，到最下面按綠色的「用 LINE 傳給新人」。</p></div></li>
+  </ol>
+  <p class="howto-note" id="howto-privacy">意見只會先記在您的手機裡，傳給新人前不會有人看到，也不會改到這一頁。</p>
+  <button id="focus-start" class="button secondary focus-start" type="button" aria-pressed="false">只看需要我表態的地方</button>
+</section>
+
+<div class="focus-bar" id="focus-bar" hidden role="region" aria-label="表態進度">
+  <p id="focus-progress-text" aria-live="polite"></p>
+  <div class="bar-track"><span class="bar-fill" id="focus-progress-fill"></span></div>
+  <div class="focus-actions"><a class="button small" id="focus-next" href="#">下一個要表態的地方 ↓</a><button class="text-button" type="button" id="focus-exit">看完整內容</button></div>
+</div>
+
+<section id="overview" aria-labelledby="overview-title">
+  <div class="section-head"><div><p class="eyebrow">01 / 一眼看完</p><h2 id="overview-title">四件事，依序來</h2></div><span class="small-note">點一下可以看詳細內容</span></div>
+  <ol class="roadmap" id="roadmap"></ol>
+</section>
+
+<nav class="jump" aria-label="本頁內容" id="jump"></nav>
+
+<div id="phases"></div>
+
+<section id="months" aria-labelledby="months-title">
+  <div class="section-head"><div><p class="eyebrow">06 / 每個月做什麼</p><h2 id="months-title">從現在到婚宴的時間表</h2></div><span class="small-note">底色標示的是這個月</span></div>
+  <ol class="months" id="month-list"></ol>
+</section>
+
+<section id="budget" aria-labelledby="budget-title">
+  <div class="section-head"><div><p class="eyebrow">07 / 預算總覽</p><h2 id="budget-title">錢花在哪裡、由誰負擔</h2></div><span class="pill">試算・會依報價調整</span></div>
+  <p class="section-intro">以下是目前的試算。您對金額或由誰負擔的意見，會直接算進這裡，並和原本的試算比較。</p>
+  <div id="budget-summary"></div>
+</section>
+
+<section class="discussion" id="discussion">
+  <div><p class="eyebrow">08 / 想先聽聽大家的想法</p><h2>這幾件事，<br>一起商量。</h2><p>不用一次決定所有細節。<br>每一題都可以按「回答這題」，<br>先把在意的事告訴我們就好。</p></div>
+  <ol id="questions"></ol>
+</section>
+
+<section id="feedback" aria-labelledby="feedback-title">
+  <div class="section-head"><div><p class="eyebrow">09 / 把意見傳給新人</p><h2 id="feedback-title" tabindex="-1">傳意見給新人</h2></div></div>
+  <form id="feedback-form" class="send-steps" novalidate>
+    <div class="send-step">
+      <h3><span class="howto-no">1</span>看一下記下的意見 <small id="opinion-count"></small></h3>
+      <ul id="opinion-list" class="opinion-list"></ul>
+      <label for="message">其他想說的話 <span>（選填，也可以用說的）</span></label>
+      <textarea id="message" maxlength="2000" rows="3" placeholder="例如：大家辛苦了，有需要幫忙的地方儘管說。"></textarea>
+    </div>
+    <div class="send-step">
+      <h3><span class="howto-no">2</span>怎麼稱呼您</h3>
+      <label for="name" class="sr-only">怎麼稱呼您</label>
+      <input id="name" autocomplete="name" maxlength="40" placeholder="例如：大姑、舅舅、黃爸爸">
+    </div>
+    <div class="send-step" id="send-area">
+      <h3><span class="howto-no">3</span>傳出去</h3>
+      <button id="sheet-button" class="button big" type="button" hidden>送出給新人</button>
+      <p class="help" id="sheet-help" hidden>按一下就會存進新人的意見表，不用開 LINE。</p>
+      <div id="sent-panel" class="sent-panel" hidden tabindex="-1"><strong id="sent-title">已送到新人那裡，謝謝您！</strong><p id="sent-text"></p><a id="line-notify" class="button secondary small" href="#" target="_blank" rel="noopener noreferrer">也在 LINE 跟新人說一聲（可不用）</a></div>
+      <div id="line-primary"><a id="line-button" class="button line big" href="#" target="_blank" rel="noopener noreferrer">用 LINE 傳給新人</a>
+      <p class="help">會打開 LINE，選新人或家族群組，按「傳送」才會送出。</p></div>
+      <details class="other-ways" id="other-ways"><summary id="other-ways-summary">沒有 LINE？其他方式</summary>
+        <div class="form-actions" id="other-actions"><a id="email-button" class="button secondary" href="#">用 Email 寄出</a><button id="copy-button" class="button secondary" type="button">複製文字</button></div>
+      </details>
+      <p id="feedback-status" role="status" class="status"></p>
+      <div id="manual-copy" hidden><label for="copy-text">請長按下方文字、全選後複製</label><textarea id="copy-text" readonly rows="8"></textarea></div>
+      <div class="hp" aria-hidden="true"><label for="hp">請勿填寫</label><input id="hp" tabindex="-1" autocomplete="off"></div>
+    </div>
+    <p class="howto-note">新人整理、和兩家討論後，採納的部分會更新到這一頁。</p>
+    <button id="reset-draft" class="text-button" type="button">傳完了，清空，重新開始</button>
+  </form>
+</section>
+
+<section id="updates" aria-labelledby="updates-title">
+  <div class="section-head"><div><p class="eyebrow">10 / 大家都能跟上進度</p><h2 id="updates-title">已經確認的事</h2></div></div>
+  <div id="decisions"></div>
+  <details class="sources"><summary>資料來源</summary><ul id="sources"></ul></details>
+</section>
+
 <footer><span aria-hidden="true">囍</span><p>婚禮是一天，家人是一輩子。</p><small>以本頁最新公告為準；出發前請再次確認集合時間與地點。</small><a href="#">回到最上面 ↑</a></footer>
-</main><noscript><p class="notice">請開啟瀏覽器的 JavaScript 以查看日期、流程與分工；也可以請新人提供列印版。</p></noscript>
+</main>
+
+<div class="dock" id="dock" hidden><span id="dock-text"></span><button class="button small" id="dock-go" type="button">傳給新人</button></div>
+
+<div class="toast" id="toast" hidden role="status" aria-live="polite"><span id="toast-text"></span><button type="button" id="toast-undo" class="toast-undo">復原</button></div>
+
+<dialog id="sheet" aria-labelledby="sheet-title">
+  <form id="sheet-form" novalidate>
+    <header class="sheet-head"><h2 id="sheet-title">我有意見</h2><button type="button" class="close" id="sheet-close" aria-label="關閉，不記下">×</button></header>
+    <p class="sheet-phase" id="sheet-context"></p>
+    <div id="sheet-name-field"><label for="sheet-name">是什麼花費？</label><input id="sheet-name" maxlength="40" placeholder="例如：長輩下午茶、媒人禮餅"></div>
+    <fieldset id="sheet-choices" class="choices"><legend>您的看法是？（點一個）</legend><div id="sheet-choice-list" class="choice-list"></div></fieldset>
+    <div id="sheet-amount" class="amount-box">
+      <label for="sheet-amount-input">建議多少錢？</label>
+      <div class="stepper"><button type="button" id="sheet-minus" aria-label="減少">−</button><input id="sheet-amount-input" type="text" inputmode="numeric" autocomplete="off" aria-describedby="sheet-amount-hint"><button type="button" id="sheet-plus" aria-label="增加">＋</button></div>
+      <p class="hint" id="sheet-amount-hint"></p>
+      <div class="presets" id="sheet-presets"></div>
+    </div>
+    <fieldset id="sheet-who" class="choices"><legend>改由誰負擔？</legend><div id="sheet-who-list" class="choice-list"></div></fieldset>
+    <label for="sheet-text" class="gap">想多說一點 <span>（選填）</span></label>
+    <textarea id="sheet-text" rows="3" maxlength="500"></textarea>
+    <p class="hint">不方便打字，可以按鍵盤上的麥克風用說的。</p>
+    <p id="sheet-error" class="error" role="alert"></p>
+    <div class="sheet-actions"><button type="submit" class="button">記下來</button><button type="button" class="button secondary" id="sheet-delete">刪除這則意見</button></div>
+  </form>
+</dialog>
+
+<noscript><p class="notice">請開啟瀏覽器的 JavaScript 以查看日期、流程與預算；也可以請新人提供列印版。</p></noscript>
 </body></html>
