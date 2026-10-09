@@ -7,6 +7,7 @@ const phases = (data.phases || []).map(p => ({ candidates: [], schedule: [], pre
 const PARTIES = Object.keys(data.parties || { groom: '男方', couple: '新人', bride: '女方' });
 const partyName = k => (data.parties || {})[k] || k;
 const STORE_KEY = 'alive-wedding-draft-v2';
+const ENDPOINT = (() => { const u = ((window.SITE_CONFIG || {}).sheetEndpoint || '').trim(); return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u) ? u : ''; })();
 const OLD_STORE_KEY = 'alive-wedding-draft-v1';
 const phaseById = Object.fromEntries(phases.map(p => [p.id, p]));
 const baseItems = {};
@@ -17,10 +18,22 @@ const KINDS = {
   date: { label: '日期', button: '對日期有意見', title: '對日期的意見', choices: [['ok', '這天可以'], ['no', '這天不方便'], ['other', '想建議別的日子']], placeholder: '例如：10/25 比較方便，上午出發比較好' },
   sched: { label: '當天行程', button: '對行程有意見', title: '對當天行程的意見', choices: [['ok', '這樣安排可以'], ['rush', '時間太趕'], ['change', '想加或減某個步驟']], placeholder: '例如：希望先拍長輩合照，大家比較不用久候' },
   prep: { label: '準備清單', button: '對準備清單有意見', title: '對準備清單的意見', choices: [['ok', '清單沒問題'], ['add', '我想補充一項'], ['who', '分工想調整']], placeholder: '例如：要準備讓長輩休息的椅子' },
+  bok: { label: '其他花費', button: '其他花費都沒意見', title: '其他花費', choices: [['ok', '都沒意見']] },
+  q: { label: '一起商量', button: '回答這題', title: '回答這一題', choices: [], placeholder: '想到什麼都可以說，例如：我覺得 7/24 比較好' },
   budget: { label: '預算', button: '我有意見', title: '對這筆花費的意見', choices: [['ok', '金額剛好'], ['less', '太多，可以少一點'], ['more', '不太夠，要多一點'], ['drop', '這項可以不用'], ['who', '想改由誰負擔']] }
 };
 const WHO = [['groom', `${partyName('groom')}全出`, { groom: 100 }], ['couple', `${partyName('couple')}全出`, { couple: 100 }], ['bride', `${partyName('bride')}全出`, { bride: 100 }], ['half', `${partyName('groom')}、${partyName('bride')}各半`, { groom: 50, bride: 50 }], ['other', '其他（請寫在下面）', null]];
 const choiceLabel = (kind, f) => (KINDS[kind].choices.find(c => c[0] === f) || [])[1] || '';
+// 字串雜湊：讓「一起商量」的題目不必有 id，Codex 改字也不會弄丟已寫的回答（回答內附原題目）
+function hashOf(str) { let h = 5381; for (const ch of str) h = ((h << 5) + h + ch.codePointAt(0)) >>> 0; return h.toString(36); }
+const questionList = () => (data.questions || []).map(q => ({ key: hashOf(q), q }));
+// 精簡模式要表態的地方：content.js 可用 ask: true/false 指定；預設為未確認、可表態的項目
+function needsAsk(x) {
+  if (x.ask === true) return true;
+  if (x.ask === false || x.locked || x.private) return false;
+  const st = x.status || '';
+  return !(st.includes('已確認') && !st.includes('待'));
+}
 const whoLabel = w => (WHO.find(x => x[0] === w) || [])[1] || '';
 
 // ---------- 格式 ----------
@@ -45,7 +58,7 @@ function icon() {
 
 // ---------- 意見草稿（只存在這支手機）與提案連結 ----------
 // e：預算項目 {f 看法, a 建議金額, w 由誰負擔, t 文字}；ad：新增項目；c：日期／行程／準備清單 {f, t}；o：方案傾向
-const emptyDraft = () => ({ e: {}, ad: [], c: {}, o: {}, n: '', m: '' });
+const emptyDraft = () => ({ e: {}, ad: [], c: {}, o: {}, q: {}, n: '', m: '' });
 const cleanStr = (v, max) => typeof v === 'string' ? v.slice(0, max) : '';
 function cleanAmount(v) { const n = Number(v); return v !== '' && v !== null && Number.isFinite(n) && n >= 0 && n <= 1e8 ? Math.round(n) : undefined; }
 const validChoice = (kind, f) => KINDS[kind].choices.some(c => c[0] === f) ? f : undefined;
@@ -85,6 +98,12 @@ function sanitize(raw) {
     d.c[key] = { f: 'add', t: (prev + cleanStr(x.x, 100).trim()).slice(0, 500) };
   }
   for (const [p, id] of Object.entries(raw.o || {})) { const c = phaseById[p] && phaseById[p].compare; if (c && c.options.some(o => o.id === id)) d.o[p] = id; }
+  for (const [k, v] of Object.entries(raw.q || {})) {
+    if (!v || typeof v !== 'object' || !/^[0-9a-z]{1,10}$/.test(k)) continue;
+    const t = cleanStr(v.t, 500).trim(); const q = cleanStr(v.q, 200).trim();
+    if (t && q) d.q[k] = { q, t };
+  }
+  if (typeof raw.sid === 'string' && /^[a-z0-9]{6,40}$/.test(raw.sid)) d.sid = raw.sid;
   d.n = cleanStr(raw.n, 40); d.m = cleanStr(raw.m, 2000);
   return d;
 }
@@ -149,29 +168,35 @@ function opinionText(kind, o, item) {
   return s || (item ? '' : '');
 }
 function opinions() {
+  // 每則意見：畫面文字（label/text）＋給試算表的欄位（rec）
   const list = [];
+  const push = (phase, label, text, rec, open, remove) => list.push({ phase, label, text, rec: { phaseId: phase.id || '', phaseLabel: phase.short || phase.label || '', targetName: label, text: '', ...rec }, open, remove });
   for (const p of phases) {
-    for (const kind of ['date', 'sched', 'prep']) {
+    for (const kind of ['date', 'sched', 'prep', 'bok']) {
       const o = draft.c[`${kind}:${p.id}`];
-      if (o) list.push({ phase: p, label: KINDS[kind].label, text: opinionText(kind, o), open: () => openSheet({ kind, pid: p.id }), remove: () => { delete draft.c[`${kind}:${p.id}`]; } });
+      if (o) push(p, KINDS[kind].label, opinionText(kind, o), { kind, targetId: `${kind}:${p.id}`, choice: o.f || '', choiceLabel: choiceLabel(kind, o.f), text: o.t || '' }, () => kind === 'bok' ? document.getElementById(`budget-${p.id}`)?.scrollIntoView({ block: 'start' }) : openSheet({ kind, pid: p.id }), () => { delete draft.c[`${kind}:${p.id}`]; });
     }
     if (draft.o[p.id] && p.compare) {
       const opt = p.compare.options.find(o => o.id === draft.o[p.id]);
-      list.push({ phase: p, label: '午宴／晚宴', text: `比較傾向 ${opt.name}`, open: () => document.getElementById(`compare-${p.id}`)?.scrollIntoView({ block: 'start' }), remove: () => { delete draft.o[p.id]; } });
+      push(p, p.compare.title ? '方案比較' : '方案', `比較傾向 ${opt.name}`, { kind: 'compare', targetId: `compare:${p.id}`, choice: opt.id, choiceLabel: opt.name }, () => document.getElementById(`compare-${p.id}`)?.scrollIntoView({ block: 'start' }), () => { delete draft.o[p.id]; });
     }
     for (const item of p.budget) {
       const o = draft.e[item.id]; if (!o) continue;
-      list.push({ phase: p, label: item.name, text: opinionText('budget', o), open: () => openSheet({ kind: 'budget', pid: p.id, id: item.id }), remove: () => { delete draft.e[item.id]; } });
+      push(p, item.name, opinionText('budget', o), { kind: 'budget', targetId: item.id, choice: o.f || '', choiceLabel: choiceLabel('budget', o.f), amount: o.a ?? '', baseAmount: item.amount ?? '', who: o.w ? whoLabel(o.w) : '', text: o.t || '' }, () => openSheet({ kind: 'budget', pid: p.id, id: item.id }), () => { delete draft.e[item.id]; });
     }
     for (const a of draft.ad.filter(a => a.p === p.id)) {
       const bits = [a.a !== undefined ? `約 ${wan(a.a)}` : '', a.w ? whoLabel(a.w) : ''].filter(Boolean).join('，');
-      list.push({ phase: p, label: `想加一項：${a.nm}`, text: bits + (a.t ? (bits ? '——' : '') + a.t : ''), open: () => openSheet({ kind: 'add', pid: p.id, id: a.id }), remove: () => { draft.ad = draft.ad.filter(x => x !== a); } });
+      push(p, `想加一項：${a.nm}`, bits + (a.t ? (bits ? '——' : '') + a.t : ''), { kind: 'add', targetId: a.id, targetName: a.nm, choice: 'add', choiceLabel: '想加一項花費', amount: a.a ?? '', who: a.w ? whoLabel(a.w) : '', text: a.t || '' }, () => openSheet({ kind: 'add', pid: p.id, id: a.id }), () => { draft.ad = draft.ad.filter(x => x !== a); });
     }
+  }
+  const qPhase = { id: 'questions', short: '一起商量', label: '一起商量' };
+  for (const [key, o] of Object.entries(draft.q)) {
+    push(qPhase, o.q, o.t, { kind: 'q', targetId: `q:${key}`, choiceLabel: '回答', text: o.t }, () => openSheet({ kind: 'q', key, q: o.q }), () => { delete draft.q[key]; });
   }
   return list;
 }
 function proposalUrl() {
-  const payload = { v: 2, ver: data.version, t: isoToday, n: draft.n, m: draft.m, e: draft.e, ad: draft.ad, c: draft.c, o: draft.o };
+  const payload = { v: 2, ver: data.version, t: isoToday, n: draft.n, m: draft.m, e: draft.e, ad: draft.ad, c: draft.c, o: draft.o, q: draft.q };
   return `${location.origin}${location.pathname}#p=${encode(payload)}`;
 }
 function feedbackText() {
@@ -245,7 +270,7 @@ function rangeBar(item) {
 }
 
 function renderBudgetRow(item) {
-  const row = node('article', undefined, 'budget-row');
+  const row = node('article', undefined, `budget-row${item.added || item.opinion || needsAsk(item) ? ' ask' : ' no-ask'}`);
   if (item.removed) row.classList.add('is-removed');
   if (item.opinion || item.added) row.classList.add('is-changed');
   const head = node('div', undefined, 'budget-head');
@@ -257,8 +282,8 @@ function renderBudgetRow(item) {
   row.append(head, money);
   const base = baseItems[item.id];
   if (base && item.opinion && typeof base.amount === 'number' && item.amount !== base.amount) row.append(node('p', `原本 ${wan(base.amount)}`, 'was'));
-  if (!item.locked && typeof item.amount === 'number' && !item.added) { const bar = rangeBar(item); if (bar) row.append(bar); }
-  row.append(node('p', `由誰負擔：${splitText(item.split)}`, 'who'));
+  if (!item.locked && typeof item.amount === 'number' && !item.added) { const bar = rangeBar(item); if (bar) { bar.classList.add('more'); row.append(bar); } }
+  row.append(node('p', `由誰負擔：${splitText(item.split)}`, 'who more'));
   if (item.note) row.append(node('p', item.note, 'note'));
   if (item.opinion) row.append(myNote(opinionText('budget', item.opinion)));
   if (item.added && item.added.t) row.append(myNote(item.added.t));
@@ -325,18 +350,18 @@ function renderPhases() {
     head.append(hgroup); if (p.status) head.append(node('span', p.status, 'pill'));
     sec.append(head);
 
-    const card = node('div', undefined, 'date-card wide'); card.id = `date-${p.id}`;
+    const card = node('div', undefined, `date-card wide${needsAsk(p) ? ' ask' : ' no-ask'}`); card.id = `date-${p.id}`;
     card.append(node('p', '日期', 'label'), node('h3', p.when, 'when-big'));
     if (p.candidates.length) { const chips = node('div', undefined, 'chips'); for (const c of p.candidates) chips.append(node('span', c, 'chip')); card.append(chips); }
     if (p.place) card.append(node('p', `地點：${p.place}`, 'detail'));
-    if (p.why) card.append(node('p', p.why, 'detail'));
-    if (p.avoid) { const tip = node('p', undefined, 'tip'); tip.append(node('strong', '婚顧提醒　'), document.createTextNode(p.avoid)); card.append(tip); }
-    const dateOp = sectionOpinion('date', p.id); if (dateOp) card.append(dateOp);
+    if (p.why) card.append(node('p', p.why, 'detail more'));
+    if (p.avoid) { const tip = node('p', undefined, 'tip more'); tip.append(node('strong', '婚顧提醒　'), document.createTextNode(p.avoid)); card.append(tip); }
+    const dateOp = needsAsk(p) || draft.c[`date:${p.id}`] ? sectionOpinion('date', p.id) : null; if (dateOp) card.append(dateOp);
     sec.append(card);
 
     const grid = node('div', undefined, 'phase-grid');
-    const left = node('div'); left.id = `sched-${p.id}`;
-    left.append(node('h3', '當天行程（示意時間）', 'block-title'));
+    const left = node('details', undefined, 'fold'); left.id = `sched-${p.id}`; left.open = !focusMode;
+    const ls = node('summary'); ls.append(node('h3', `當天行程（${p.schedule.length} 個步驟）`, 'block-title')); left.append(ls);
     const tl = node('ol', undefined, 'timeline');
     for (const s of p.schedule) {
       const li = node('li'); const body = node('div');
@@ -346,8 +371,8 @@ function renderPhases() {
     left.append(tl);
     if (p.scheduleNote) left.append(node('p', p.scheduleNote, 'planning-note'));
     const schedOp = sectionOpinion('sched', p.id); if (schedOp) left.append(schedOp);
-    const right = node('div', undefined, 'prepare'); right.id = `prep-${p.id}`;
-    right.append(node('h3', '要準備的東西', 'block-title'));
+    const right = node('details', undefined, 'prepare fold'); right.id = `prep-${p.id}`; right.open = !focusMode;
+    const rs = node('summary'); rs.append(node('h3', `要準備的東西（${p.prepare.reduce((n, g) => n + (g.items || []).length, 0)} 項）`, 'block-title')); right.append(rs);
     for (const g of p.prepare) {
       right.append(node('h4', g.group, 'prep-group'));
       const ul = node('ul', undefined, 'checklist');
@@ -369,6 +394,14 @@ function renderPhases() {
     for (const item of itemsOf(p.id)) list.append(renderBudgetRow(item));
     if (!list.children.length && p.budgetNote) list.append(node('p', p.budgetNote, 'empty'));
     bud.append(list);
+    const pending = p.budget.filter(i => needsAsk(i) && !draft.e[i.id]).length;
+    const bok = draft.c[`bok:${p.id}`];
+    if (!readOnly && (pending || bok)) {
+      const b = node('button', bok ? '✓ 其他花費都沒意見（再按一下取消）' : `其他 ${pending} 筆花費都沒意見`, `button small secondary bok${bok ? ' on' : ''}`); b.type = 'button';
+      b.setAttribute('aria-pressed', String(!!bok));
+      b.addEventListener('click', () => { const before = snapshot(); if (bok) delete draft.c[`bok:${p.id}`]; else draft.c[`bok:${p.id}`] = { f: 'ok' }; commit(bok ? '已取消' : `已記下：${p.short || p.label}其他花費都沒意見`, before, `budget-${p.id}`); });
+      bud.append(b);
+    } else if (readOnly && bok) bud.append(node('p', '這位家人表示：其他花費都沒意見', 'mine'));
     if (!readOnly) { const add = node('button', '＋ 我想加一項花費', 'button secondary add-item'); add.type = 'button'; add.addEventListener('click', () => openSheet({ kind: 'add', pid: p.id })); bud.append(add); }
     sec.append(bud);
     host.append(sec);
@@ -454,7 +487,8 @@ function renderBasket() {
   $('opinion-count').textContent = list.length ? `共 ${list.length} 則` : '';
   const dock = $('dock');
   dock.hidden = readOnly || !count;
-  $('dock-text').textContent = `已記下 ${count} 則意見，還沒傳出`;
+  $('dock-text').textContent = `已記下 ${count} 則意見，還沒${ENDPOINT ? '送出' : '傳出'}`;
+  if (count) $('sent-panel').hidden = true;
   const text = feedbackText();
   $('line-button').href = `https://line.me/R/share?text=${encodeURIComponent(text)}`;
   const mail = data.feedback && /^[^\s@?&#]+@[^\s@?&#]+\.[^\s@?&#]+$/.test(data.feedback.email || '') ? data.feedback.email : '';
@@ -463,7 +497,57 @@ function renderBasket() {
   $('send-area').classList.toggle('ready', !!count);
 }
 
-function renderAll() { renderNext(); renderRoadmap(); renderPhases(); renderSummary(); renderBasket(); }
+function renderQuestions() {
+  const ol = $('questions'); ol.replaceChildren();
+  for (const { key, q } of questionList()) {
+    const li = node('li', undefined, 'question'); li.id = `q-${key}`;
+    li.append(node('span', q, 'question-text'));
+    const o = draft.q[key];
+    if (o) li.append(myNote(o.t, '我的回答'));
+    if (!readOnly) li.append(opinionButton(o ? '改我的回答' : KINDS.q.button, () => openSheet({ kind: 'q', key, q }), !!o, q));
+    ol.append(li);
+  }
+  // 已回答、但題目已被改寫或移除的回答，仍保留在「傳意見」清單裡
+}
+
+// ---------- 精簡模式：只看要表態的地方 ----------
+let focusMode = false;
+try { focusMode = !readOnly && localStorage.getItem('alive-wedding-focus') === '1'; } catch (_) { /* 忽略 */ }
+// 已送出的表態點記在這支手機，送出後進度不會歸零
+let sentKeys = new Set();
+try { sentKeys = new Set(JSON.parse(localStorage.getItem('alive-wedding-sent') || '[]')); } catch (_) { /* 忽略 */ }
+function askTargets() {
+  const t = [];
+  const add = (key, done, href) => t.push({ key, done: done || (!readOnly && sentKeys.has(key)), href });
+  for (const p of phases) {
+    if (needsAsk(p)) add(`date:${p.id}`, !!draft.c[`date:${p.id}`], `#date-${p.id}`);
+    if (p.compare) add(`compare:${p.id}`, !!draft.o[p.id], `#compare-${p.id}`);
+    // 每一場的預算算一個表態點：每筆都表態過，或按了「其他花費都沒意見」
+    const asks = p.budget.filter(needsAsk);
+    if (asks.length) add(`budget:${p.id}`, !!draft.c[`bok:${p.id}`] || asks.every(i => draft.e[i.id]), `#budget-${p.id}`);
+  }
+  for (const { key } of questionList()) add(`q:${key}`, !!draft.q[key], `#q-${key}`);
+  return t;
+}
+function renderFocus() {
+  document.body.classList.toggle('focus-mode', focusMode);
+  for (const id of ['focus-toggle', 'focus-start']) { const b = $(id); if (!b) continue; b.setAttribute('aria-pressed', String(focusMode)); }
+  $('focus-toggle').textContent = focusMode ? '看完整內容' : '只看要表態的';
+  $('focus-start').textContent = focusMode ? '回到完整內容' : '只看需要我表態的地方';
+  const t = askTargets(); const done = t.filter(x => x.done).length;
+  const bar = $('focus-bar'); bar.hidden = !focusMode;
+  $('focus-progress-text').textContent = done === t.length ? `${t.length} 個地方都表態了，謝謝您！到最下面傳給新人吧。` : `共 ${t.length} 個地方等您表態，已完成 ${done} 個`;
+  $('focus-progress-fill').style.width = `${t.length ? Math.round(done / t.length * 100) : 0}%`;
+  const next = t.find(x => !x.done); $('focus-next').hidden = !next; if (next) $('focus-next').href = next.href;
+}
+function setFocus(on) {
+  focusMode = on;
+  try { localStorage.setItem('alive-wedding-focus', on ? '1' : ''); } catch (_) { /* 忽略 */ }
+  renderAll();
+  (on ? $('focus-bar') : $('overview')).scrollIntoView({ block: 'start' });
+}
+
+function renderAll() { renderNext(); renderRoadmap(); renderPhases(); renderSummary(); renderQuestions(); renderBasket(); renderFocus(); }
 
 // ---------- 復原與提示 ----------
 const snapshot = () => JSON.stringify(draft);
@@ -509,18 +593,20 @@ function openSheet(target) {
   let existing = null; let item = null;
   if (target.kind === 'budget') { item = baseItems[target.id]; existing = draft.e[target.id]; }
   else if (target.kind === 'add') existing = target.id ? draft.ad.find(a => a.id === target.id) : null;
+  else if (target.kind === 'q') existing = draft.q[target.key];
   else existing = draft.c[`${target.kind}:${target.pid}`];
   ctx.f = existing && existing.f; ctx.w = existing && existing.w;
 
   $('sheet-title').textContent = target.kind === 'add' ? '我想加一項花費' : KINDS[target.kind].title;
-  const where = [p.label];
+  const where = [p ? p.label : '一起商量'];
   if (item) where.push(item.name, typeof item.amount === 'number' ? `目前 ${wan(item.amount)}` : '');
   else if (target.kind === 'date') where.push(p.when);
+  else if (target.kind === 'q') where.splice(0, 1, target.q);
   $('sheet-context').textContent = where.filter(Boolean).join('・');
   $('sheet-name-field').hidden = target.kind !== 'add';
   $('sheet-name').value = target.kind === 'add' && existing ? existing.nm : '';
-  $('sheet-choices').hidden = target.kind === 'add';
-  if (target.kind !== 'add') radioGroup($('sheet-choice-list'), 'feel', KINDS[target.kind].choices, ctx.f, v => { ctx.f = v; if ((v === 'less' || v === 'more') && item && $('sheet-amount-input').value === '' && typeof item.amount === 'number') setAmount(item.amount); syncSheet(); });
+  $('sheet-choices').hidden = target.kind === 'add' || target.kind === 'q';
+  if (target.kind !== 'add' && target.kind !== 'q') radioGroup($('sheet-choice-list'), 'feel', KINDS[target.kind].choices, ctx.f, v => { ctx.f = v; if ((v === 'less' || v === 'more') && item && $('sheet-amount-input').value === '' && typeof item.amount === 'number') setAmount(item.amount); syncSheet(); });
   radioGroup($('sheet-who-list'), 'who', WHO.map(w => [w[0], w[1]]), ctx.w, v => { ctx.w = v; });
   setAmount(existing && existing.a !== undefined ? existing.a : undefined);
   const presets = $('sheet-presets'); presets.replaceChildren();
@@ -534,7 +620,7 @@ function openSheet(target) {
   $('sheet-delete').hidden = !existing;
   syncSheet();
   if (typeof sheet.showModal === 'function') sheet.showModal(); else sheet.setAttribute('open', '');
-  (target.kind === 'add' ? $('sheet-name') : sheet.querySelector('input[name=feel]')).focus();
+  (target.kind === 'add' ? $('sheet-name') : target.kind === 'q' ? $('sheet-text') : sheet.querySelector('input[name=feel]')).focus();
 }
 function closeSheet() { if (typeof sheet.close === 'function') sheet.close(); else sheet.removeAttribute('open'); }
 $('sheet-amount-input').addEventListener('input', () => { const n = parseAmount($('sheet-amount-input').value); $('sheet-amount-hint').textContent = n === undefined ? '不確定可以不填' : `＝ ${wan(n)}`; });
@@ -549,6 +635,7 @@ $('sheet-delete').addEventListener('click', () => {
   const before = snapshot();
   if (ctx.kind === 'budget') delete draft.e[ctx.id];
   else if (ctx.kind === 'add') draft.ad = draft.ad.filter(a => a.id !== ctx.id);
+  else if (ctx.kind === 'q') delete draft.q[ctx.key];
   else delete draft.c[`${ctx.kind}:${ctx.pid}`];
   closeSheet(); commit('已刪除這則意見', before);
 });
@@ -565,6 +652,9 @@ $('sheet-form').addEventListener('submit', ev => {
     if (amount !== undefined) x.a = amount; if (ctx.w) x.w = ctx.w; if (text) x.t = text;
     const i = draft.ad.findIndex(a => a.id === x.id); if (i >= 0) draft.ad[i] = x; else draft.ad.push(x);
     anchor = `budget-${ctx.pid}`;
+  } else if (ctx.kind === 'q') {
+    if (!text) { $('sheet-error').textContent = '請寫幾個字，或按鍵盤上的麥克風用說的。'; $('sheet-text').focus(); return; }
+    draft.q[ctx.key] = { q: ctx.q.slice(0, 200), t: text }; anchor = `q-${ctx.key}`;
   } else {
     if (!ctx.f && !text) { $('sheet-error').textContent = '請點一個看法，或寫幾個字都可以。'; return; }
     const x = {}; if (ctx.f) x.f = ctx.f; if (text) x.t = text;
@@ -611,10 +701,59 @@ $('reset-draft').addEventListener('click', () => {
   renderAll(); toast('已清空，可以重新開始', before);
 });
 $('dock-go').addEventListener('click', () => { $('feedback').scrollIntoView({ block: 'start' }); $('feedback-title').focus({ preventScroll: true }); });
+$('dock-go').textContent = ENDPOINT ? '去送出' : '傳給新人';
+
+// ---------- 直接送進 Google 試算表 ----------
+function newId() { const a = new Uint8Array(10); crypto.getRandomValues(a); return Array.from(a, b => b.toString(36).padStart(2, '0')).join('').slice(0, 20); }
+if (ENDPOINT) {
+  $('sheet-button').hidden = false; $('sheet-help').hidden = false;
+  $('other-actions').prepend($('line-button'));
+  $('line-primary').hidden = true;
+  $('other-ways-summary').textContent = '送不出去？改用 LINE 或其他方式';
+  $('howto-send-title').textContent = '送出給新人';
+  $('howto-send-text').textContent = '全部看完，到最下面按「送出給新人」，一按就送到。';
+}
+async function sendToSheet() {
+  const list = opinions();
+  if (!list.length && !draft.m.trim()) { $('feedback-status').textContent = '還沒有任何意見。可以先在上面按「我有意見」，或在「其他想說的話」寫下來。'; return; }
+  if (!draft.sid) { draft.sid = newId(); save(); }
+  const payload = {
+    v: 1, id: draft.sid, sentAt: new Date().toISOString(), name: draft.n.trim(), version: data.version || '', message: draft.m.trim(),
+    before: grandTotal(false), after: grandTotal(true), url: proposalUrl(),
+    opinions: list.map(o => o.rec), raw: draft, hp: $('hp').value
+  };
+  const btn = $('sheet-button'); btn.disabled = true; btn.textContent = '送出中，請稍等…';
+  $('feedback-status').textContent = '';
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    // 用 text/plain 避免瀏覽器先送 CORS 預檢；Apps Script 會轉址後回傳 JSON
+    const res = await fetch(ENDPOINT, { method: 'POST', body: JSON.stringify(payload), signal: ctrl.signal, redirect: 'follow' });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'failed');
+    const sentCount = list.length + (draft.m.trim() ? 1 : 0);
+    for (const x of askTargets()) if (x.done) sentKeys.add(x.key);
+    try { localStorage.setItem('alive-wedding-sent', JSON.stringify([...sentKeys])); } catch (_) { /* 忽略 */ }
+    draft = { ...emptyDraft(), n: draft.n }; save(); $('message').value = '';
+    renderAll();
+    const time = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    $('sent-text').textContent = `${time} 送出 ${sentCount} 則意見。新人會整理後和兩家討論。還有想到的，可以繼續按「我有意見」再送一次。`;
+    $('line-notify').href = `https://line.me/R/share?text=${encodeURIComponent(`我在婚禮小冊留了 ${sentCount} 則意見，已經送到意見表了。${draft.n.trim() ? `——${draft.n.trim()}` : ''}`)}`;
+    $('sent-panel').hidden = false; $('sent-panel').focus();
+  } catch (_) {
+    $('feedback-status').textContent = '沒有送出去，可能是網路不穩。請再按一次「送出給新人」；還是不行，請打開下面的「改用 LINE」。';
+    $('other-ways').open = true;
+  } finally {
+    clearTimeout(timer); btn.disabled = false; btn.textContent = '送出給新人';
+  }
+}
+$('sheet-button').addEventListener('click', sendToSheet);
+for (const id of ['focus-toggle', 'focus-start']) $(id).addEventListener('click', () => setFocus(!focusMode));
+$('focus-exit').addEventListener('click', () => setFocus(false));
 
 // ---------- 新人點開長輩傳來的連結 ----------
 if (readOnly) {
   document.body.classList.add('read-only');
+  $('focus-toggle').hidden = true;
   $('proposal-banner').hidden = false;
   $('proposal-title').textContent = `${draft.n.trim() || '家人'}的意見（尚未採納）`;
   const when = typeof proposal.t === 'string' ? proposal.t.slice(0, 10) : '';
@@ -638,7 +777,7 @@ $('font').addEventListener('click', () => {
 try { if (localStorage.getItem('alive-wedding-large')) $('font').click(); } catch (_) { /* 忽略 */ }
 $('print').addEventListener('click', () => window.print());
 
-for (const q of data.questions || []) $('questions').append(node('li', q));
+
 for (const item of data.decisions || []) {
   const row = node('article', undefined, 'decision'); const time = node('time', item.date); time.dateTime = item.date;
   row.append(time, node('h3', item.title), node('p', item.detail)); $('decisions').append(row);

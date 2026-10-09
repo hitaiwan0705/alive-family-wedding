@@ -13,7 +13,7 @@
 
 ## 長輩怎麼留意見（互動設計）
 
-分工：**內容由 Codex 維護 `content.js`；本儲存庫的 `index.html`、`app.js`、`styles.css` 只負責呈現與收集意見。** 互動層不寫死任何日期、金額或說明文字。
+分工：**內容由 Codex 維護 `content.js`；`index.html`、`app.js`、`styles.css`、`config.js`、`apps-script/` 只負責呈現與收集意見。** 互動層不寫死任何日期、金額或說明文字。
 
 1. 頁首「怎麼留意見？三個步驟」說明整個流程。
 2. 全頁只有一種入口：**「我有意見」** 按鈕，出現在每一場的日期、當天行程、準備清單和每一筆預算旁。午宴／晚宴比較則是一鍵「我比較傾向這個」。
@@ -23,8 +23,11 @@
 
 技術說明：
 
-- 意見只存在長輩自己的瀏覽器（localStorage `alive-wedding-draft-v2`，會自動讀入 v1 舊草稿），不會上傳，也不會改到 `content.js`。
-- LINE 訊息前半是可讀的意見清單，後半是 `#p=` 連結（新人用）。新人點開進入唯讀檢視，頂端「複製提案資料」可取得 JSON，交給 Codex 判斷是否採納。
+- 意見送出前只存在長輩自己的瀏覽器（localStorage `alive-wedding-draft-v2`，會自動讀入 v1 舊草稿），不會改到 `content.js`。
+- **送進 Google 試算表**：`config.js` 填好 `sheetEndpoint` 後，主要按鈕變成「送出給新人」，意見直接寫進試算表，Codex 用 token 讀取與回寫。設定步驟與 API 見 [`apps-script/README.md`](apps-script/README.md)。沒填網址時退回 LINE／Email／複製文字。
+- LINE 訊息前半是可讀的意見清單，後半是 `#p=` 連結（新人用）。新人點開進入唯讀檢視，頂端「複製提案資料」可取得 JSON。
+- **精簡模式**（頁首「只看要表態的」）：收起說明、時間表與總覽，只留需要表態的日期、預算、方案與討論題，上方顯示「共 N 個地方等您表態，已完成 M 個」與「下一個要表態的地方」。每一場預算有「其他花費都沒意見」一鍵完成。
+- 「一起商量」的每一題都有「回答這題」。
 
 ## 給 Codex：`content.js` 欄位約定
 
@@ -40,11 +43,13 @@
 | `phases[].schedule[]` | 選填 | `{time, title, detail, who}`；`scheduleNote` 為行程下方註記 |
 | `phases[].prepare[]` | 選填 | `{group, items:[{text, who}]}` |
 | `phases[].budget[]` | 選填 | `{id, name, amount, low, high, split, note, status}`；`private: true` 不列金額；`locked: true` 不開放意見。`id` 沿用 Alive `Budget_ID`，不要更改 |
+| `ask`（日期卡層級 `phases[]` 或 `budget[]`） | 選填 | 精簡模式是否列為要表態：`true`／`false`。未填時，`status` 含「已確認」且不含「待」、或 `private`／`locked` 者不列入 |
 | `phases[].budgetNote` | 選填 | 該場沒有預算項目時顯示 |
 | `phases[].compare` | 選填 | 方案比較：`title`、`intro`、`options[]`（`id`、`name`、`sub`、`times`、`costs[{item, low, mid, high}]`、`points`）、`conclusion`、`unknown`、`sources` |
 | `budgetNotes[]` | 選填 | 預算總覽下方註記 |
 | `months[]` | 選填 | `{month:'YYYY-MM', focus, tasks:[{text, who}]}` |
-| `questions[]`、`decisions[]`、`sources[]` | 選填 | 討論題、已確認紀錄、資料來源 |
+| `questions[]` | 選填 | 討論題（純文字）。每題可被回答；回答以題目文字雜湊對應並附原題，改字不會遺失已寫的回答 |
+| `decisions[]`、`sources[]` | 選填 | 已確認紀錄、資料來源 |
 | `feedback.email` | 選填 | 設定後才出現 Email 寄出 |
 
 ## 揭露原則

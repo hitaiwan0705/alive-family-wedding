@@ -5,11 +5,11 @@
 <meta name="description" content="給家人的婚禮準備小冊：提親、登記、訂婚、結婚的日期、行程、準備項目與預算，可以直接留下意見。">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#713b43"><title>給家人的婚禮小冊</title>
-<link rel="stylesheet" href="styles.css"><script src="content.js" defer></script><script src="app.js" defer></script>
+<link rel="stylesheet" href="styles.css"><script src="config.js" defer></script><script src="content.js" defer></script><script src="app.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">跳到婚禮安排</a>
-<header class="top"><a class="brand" href="#"><span aria-hidden="true">囍</span> 給家人的婚禮小冊</a><div class="tools"><button id="font" type="button" aria-pressed="false">字再大一點</button><button id="print" type="button">列印留存</button></div></header>
+<header class="top"><a class="brand" href="#"><span aria-hidden="true">囍</span> 給家人的婚禮小冊</a><div class="tools"><button id="focus-toggle" type="button" aria-pressed="false">只看要表態的</button><button id="font" type="button" aria-pressed="false">字再大一點</button><button id="print" type="button">列印留存</button></div></header>
 
 <div id="proposal-banner" class="proposal-banner" hidden role="region" aria-label="提案檢視">
   <div><strong id="proposal-title">這是一份家人的建議</strong><p id="proposal-meta"></p></div>
@@ -35,10 +35,17 @@
   <ol>
     <li><span class="howto-no">1</span><div><strong>看到想說的地方</strong><p>按旁邊的 <span class="inline-chip">我有意見</span></p></div></li>
     <li><span class="howto-no">2</span><div><strong>點一個看法</strong><p>例如「太多了」「這天不方便」。想多說可以打字，或按鍵盤上的麥克風用說的。</p></div></li>
-    <li><span class="howto-no">3</span><div><strong>用 LINE 傳給新人</strong><p>全部看完，到最下面按綠色的「用 LINE 傳給新人」。</p></div></li>
+    <li><span class="howto-no">3</span><div><strong id="howto-send-title">用 LINE 傳給新人</strong><p id="howto-send-text">全部看完，到最下面按綠色的「用 LINE 傳給新人」。</p></div></li>
   </ol>
   <p class="howto-note">意見只會先記在您的手機裡，傳給新人前不會有人看到，也不會改到這一頁。</p>
+  <button id="focus-start" class="button secondary focus-start" type="button" aria-pressed="false">只看需要我表態的地方</button>
 </section>
+
+<div class="focus-bar" id="focus-bar" hidden role="region" aria-label="表態進度">
+  <p id="focus-progress-text" aria-live="polite"></p>
+  <div class="bar-track"><span class="bar-fill" id="focus-progress-fill"></span></div>
+  <div class="focus-actions"><a class="button small" id="focus-next" href="#">下一個要表態的地方 ↓</a><button class="text-button" type="button" id="focus-exit">看完整內容</button></div>
+</div>
 
 <section id="overview" aria-labelledby="overview-title">
   <div class="section-head"><div><p class="eyebrow">01 / 一眼看完</p><h2 id="overview-title">四件事，依序來</h2></div><span class="small-note">點一下可以看詳細內容</span></div>
@@ -61,7 +68,7 @@
 </section>
 
 <section class="discussion" id="discussion">
-  <div><p class="eyebrow">08 / 想先聽聽大家的想法</p><h2>這幾件事，<br>一起商量。</h2><p>不用一次決定所有細節。<br>先把在意的事告訴我們就好。</p></div>
+  <div><p class="eyebrow">08 / 想先聽聽大家的想法</p><h2>這幾件事，<br>一起商量。</h2><p>不用一次決定所有細節。<br>每一題都可以按「回答這題」，<br>先把在意的事告訴我們就好。</p></div>
   <ol id="questions"></ol>
 </section>
 
@@ -81,13 +88,17 @@
     </div>
     <div class="send-step" id="send-area">
       <h3><span class="howto-no">3</span>傳出去</h3>
-      <a id="line-button" class="button line big" href="#" target="_blank" rel="noopener noreferrer">用 LINE 傳給新人</a>
-      <p class="help">會打開 LINE，選新人或家族群組，按「傳送」才會送出。</p>
-      <details class="other-ways"><summary>沒有 LINE？其他方式</summary>
-        <div class="form-actions"><a id="email-button" class="button secondary" href="#">用 Email 寄出</a><button id="copy-button" class="button secondary" type="button">複製文字</button></div>
+      <button id="sheet-button" class="button big" type="button" hidden>送出給新人</button>
+      <p class="help" id="sheet-help" hidden>按一下就會存進新人的意見表，不用開 LINE。</p>
+      <div id="sent-panel" class="sent-panel" hidden tabindex="-1"><strong id="sent-title">已送到新人那裡，謝謝您！</strong><p id="sent-text"></p><a id="line-notify" class="button secondary small" href="#" target="_blank" rel="noopener noreferrer">也在 LINE 跟新人說一聲（可不用）</a></div>
+      <div id="line-primary"><a id="line-button" class="button line big" href="#" target="_blank" rel="noopener noreferrer">用 LINE 傳給新人</a>
+      <p class="help">會打開 LINE，選新人或家族群組，按「傳送」才會送出。</p></div>
+      <details class="other-ways" id="other-ways"><summary id="other-ways-summary">沒有 LINE？其他方式</summary>
+        <div class="form-actions" id="other-actions"><a id="email-button" class="button secondary" href="#">用 Email 寄出</a><button id="copy-button" class="button secondary" type="button">複製文字</button></div>
       </details>
       <p id="feedback-status" role="status" class="status"></p>
       <div id="manual-copy" hidden><label for="copy-text">請長按下方文字、全選後複製</label><textarea id="copy-text" readonly rows="8"></textarea></div>
+      <div class="hp" aria-hidden="true"><label for="hp">請勿填寫</label><input id="hp" tabindex="-1" autocomplete="off"></div>
     </div>
     <p class="howto-note">新人整理、和兩家討論後，採納的部分會更新到這一頁。</p>
     <button id="reset-draft" class="text-button" type="button">傳完了，清空，重新開始</button>

@@ -156,3 +156,34 @@ dialog::backdrop{background:rgba(40,25,25,.45)}
   .opinion-slot .opinion-button,.budget-row .opinion-button{width:100%}
 }
 @media print{.opinion-button,.howto,#feedback,.toast,.dock{display:none!important}}
+
+/* 06 版：精簡模式、可收合段落、送進試算表 */
+.fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary::after{content:'收起 ▲';font-size:.75rem;color:var(--wine);white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+.fold:not([open])>summary::after{content:'展開 ▼'}
+.fold>summary .block-title{margin:0}
+.focus-start{margin-top:16px;width:100%;max-width:420px}
+.focus-start[aria-pressed=true]{background:var(--wine);color:#fff}
+#focus-toggle[aria-pressed=true]{background:var(--wine);color:#fff;border-color:var(--wine)}
+.focus-bar{position:sticky;top:0;z-index:5;background:#fbf3e6;border-bottom:2px solid #c08a3e;padding:12px 30px;margin:0 -30px}
+.focus-bar p{margin:0 0 8px;font-weight:700;font-size:.9rem;color:var(--wine)}
+.focus-bar .bar-track{height:12px}.focus-bar .bar-fill{background:var(--green)}
+.focus-actions{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
+.focus-mode .jump,.focus-mode #overview,.focus-mode #months,.focus-mode #budget,.focus-mode #updates,.focus-mode .seal,.focus-mode .hero .intro,
+.focus-mode .more,.focus-mode .no-ask.budget-row,.focus-mode .compare .compare-times,.focus-mode .compare .compare-costs,.focus-mode .compare .prep-group,
+.focus-mode .compare .fine-print,.focus-mode .compare .planning-note,.focus-mode .compare>.section-intro,.focus-mode .scheduleNote,.focus-mode .planning-note{display:none!important}
+.focus-mode .hero{padding:28px 0 20px}
+.focus-mode .date-card.no-ask .opinion-slot{display:none}
+.question{padding:16px 0 16px 6px!important}.question-text{display:block;margin-bottom:10px}
+.question .opinion-button{background:#fff}
+.discussion .mine{background:#fffaf2}
+.sent-panel{border:2px solid var(--green);background:#eef5f0;border-radius:12px;padding:16px 18px;margin-top:14px}
+.sent-panel strong{color:var(--green);font-size:1.05rem;display:block;margin-bottom:6px}.sent-panel strong::before{content:'✓ '}
+.sent-panel p{font-size:.85rem;margin:0 0 12px}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+#sheet-button{background:var(--green);border-color:var(--green)}#sheet-button:disabled{opacity:.6}
+@media(max-width:760px){.focus-bar{padding:10px 20px;margin:0 -20px}.focus-actions .button{flex:1}.tools{flex-wrap:wrap;justify-content:flex-end}}
+@media print{.focus-bar,.focus-start,#focus-toggle{display:none!important}.fold>summary::after{display:none}}
+.phase-budget .bok{width:100%;margin-top:16px}.phase-budget .bok.on{background:var(--green);border-color:var(--green);color:#fff}
+.phase-budget .bok+.add-item{margin-top:10px}
