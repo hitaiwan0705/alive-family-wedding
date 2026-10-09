@@ -68,6 +68,34 @@ def kind_key(name):
     return (KIND_ORDER.index(name) if name in KIND_ORDER else len(KIND_ORDER), name)
 
 
+def item_view(kind, i):
+    return (i.get('文字') or '').strip() if kind == '一起商量' else (i.get('看法') or '（只寫文字）')
+
+
+def view_text(kind, items):
+    return '、'.join(f'{v} ×{c}' for v, c in Counter(item_view(kind, i) for i in items).most_common())
+
+
+def divergence(kind, items):
+    c = Counter(item_view(kind, i) for i in items)
+    return 1 - max(c.values()) / len(items) if items else 0
+
+
+def divergence_label(d):
+    return '意見分歧大' if d >= 0.5 else '有不同意見' if d > 0 else '看法一致'
+
+
+def agenda(groups):
+    """與 Code.gs agendaRank_ 相同：2 則以上，依分歧程度、則數、人數排序。"""
+    ranked = []
+    for key, items in groups.items():
+        if len(items) >= 2 and key[1] != '其他花費都沒意見':
+            people = len({i.get('稱呼') or '（未留名）' for i in items})
+            ranked.append((key, items, divergence(key[1], items), people))
+    ranked.sort(key=lambda t: (-t[2], -len(t[1]), -t[3], t[0][0] + t[0][3]))  # 最後依「場合＋項目」字碼排序，與 Code.gs 相同
+    return [(k, items, d) for k, items, d, _ in ranked]
+
+
 def build_digest(opinions, submissions, status_label, since):
     today = datetime.now().strftime('%Y-%m-%d')
     people = sorted({o.get('稱呼') or '（未留名）' for o in opinions})
@@ -86,14 +114,14 @@ def build_digest(opinions, submissions, status_label, since):
     for o in sorted(opinions, key=lambda o: (phase_key(o.get('場合', '')), kind_key(o.get('類型', '')), o.get('項目名稱', ''))):
         key = (o.get('場合', ''), o.get('類型', ''), o.get('項目代碼', ''), o.get('項目名稱', ''))
         groups.setdefault(key, []).append(o)
-    hot = []
-    for (phase, kind, _code, name), items in groups.items():
-        views = Counter(i.get('看法') or '（只寫文字）' for i in items)
-        if len(items) >= 2:
-            hot.append(f'- 【{phase}】{name}：{len(items)} 則，' + ('看法一致' if len(views) == 1 else '看法分歧') +
-                       '（' + '、'.join(f'{v} ×{c}' for v, c in views.most_common()) + '）')
-    if hot:
-        out += ['## 先看這幾項（2 則以上）', ''] + hot + ['']
+    top = agenda(groups)[:3]
+    if top:
+        out += ['## 會議先談這三項（看法最分歧）', '',
+                '> 規則同試算表「會議議程」：只看待處理、同一項目 2 則以上，依分歧程度排序。', '']
+        for n, (key, items, div) in enumerate(top, 1):
+            phase, kind, _code, name = key
+            out.append(f'{n}. 【{phase}】{name}：{len(items)} 則，{divergence_label(div)}（{view_text(kind, items)}）')
+        out.append('')
 
     current_phase = None
     for (phase, kind, code, name), items in groups.items():
