@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="給家人的婚禮準備小冊：重要日期、當天流程、工作分工與意見回饋。">
+<meta name="theme-color" content="#713b43"><title>給家人的婚禮小冊｜提親・訂婚・結婚</title>
+<link rel="stylesheet" href="styles.css"><script src="content.js" defer></script><script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">跳到婚禮安排</a>
+<header class="top"><a class="brand" href="#"><span aria-hidden="true">囍</span> 給家人的婚禮小冊</a><div class="tools"><button id="font" type="button" aria-pressed="false">字再大一點</button><button id="print" type="button">列印留存</button></div></header>
+<main id="main">
+<section class="hero" aria-labelledby="title"><div class="hero-copy"><p class="eyebrow">有你們的祝福，就是好日子</p><h1 id="title">我們的婚禮，<br>一起準備。</h1><p class="intro">把日子安排好，把家人照顧好。<br>重要的事都放在這一頁，慢慢看、一起聊。</p><div class="meta"><span id="version"></span><span id="updated"></span></div><a class="button" href="#feedback">我有想法想說 <span aria-hidden="true">↗</span></a></div><div class="seal" aria-hidden="true"><div class="seal-inner"><span>兩家人</span><strong>囍</strong><span>一件喜事</span></div><p>好好商量・好好準備</p></div></section>
+<nav class="jump" aria-label="本頁內容"><a href="#dates">重要日期</a><a href="#schedule">當天流程</a><a href="#tasks">準備分工</a><a href="#feedback">留下想法</a></nav>
+<aside class="notice"><strong>先跟大家說一聲</strong><p id="notice"></p></aside>
+<section id="dates"><div class="section-head"><div><p class="eyebrow">01 / 先記住這些</p><h2>重要日期與地點</h2></div><span class="small-note">定案後會更新在這裡</span></div><div class="date-grid" id="date-cards"></div></section>
+<section id="schedule"><div class="section-head"><div><p class="eyebrow">02 / 每一場，好好準備</p><h2>提親到婚宴，怎麼走</h2></div><span class="pill">流程草案・時辰待確認</span></div><p class="section-intro">登記日已定，其他場合仍在討論。選一場看流程；順序與細節會依兩家共識調整。</p><div class="event-buttons" id="event-buttons" role="group" aria-label="選擇要看的場合"></div><p id="event-intro" class="planning-note"></p><ol class="timeline" id="timeline"></ol><p class="planning-note">交通提醒：彰化迎娶與台北宴客需另留實際車程、上下車與休息緩衝。先確認迎娶時辰與回程需求，再決定午宴或晚宴，不套用同一場地的時間表。</p></section>
+<section id="tasks"><div class="section-head"><div><p class="eyebrow">03 / 一起分擔，不必一個人忙</p><h2>什麼時候，準備什麼</h2></div></div><p class="section-intro">這是建議分工。人選與內容會先商量，確認後才請大家幫忙。</p><div id="task-list" class="task-list"></div></section>
+<section class="discussion" id="discussion"><div><p class="eyebrow">04 / 想先聽聽大家的想法</p><h2>這三件事，<br>一起商量。</h2><p>不用一次決定所有細節。<br>先把在意的事告訴我們就好。</p></div><ol id="questions"></ol></section>
+<section id="feedback"><div class="section-head"><div><p class="eyebrow">05 / 每個想法，都會好好看</p><h2>有話想說，留在這裡</h2></div></div><p class="section-intro">建議會先由新人整理與討論。採納後，才更新上面的安排，並在下方說明。</p><div class="feedback-grid"><form id="feedback-form"><div class="field-row"><div><label for="name">怎麼稱呼您 <span>（選填）</span></label><input id="name" name="name" autocomplete="name" maxlength="60" placeholder="例如：大姑、舅舅"></div><div><label for="topic">想討論哪件事</label><select id="topic" name="topic"><option>提親日期與安排</option><option>登記與證人</option><option>訂婚日期與儀式</option><option>迎娶與台北婚宴</option><option>當天流程與習俗</option><option>工作分工</option><option>交通、餐點與照顧需求</option><option>其他祝福與想法</option></select></div></div><label for="message">您的想法 <span>（必填）</span></label><textarea id="message" name="message" required maxlength="3000" rows="5" placeholder="例如：希望先拍長輩合照，大家比較不用久候。" aria-describedby="feedback-help feedback-status"></textarea><p id="feedback-help" class="help"></p><div class="form-actions"><button id="email-button" class="button" type="submit" hidden>用 Email 寄出想法</button><button id="copy-button" class="button secondary" type="button">複製想法，傳給新人</button></div><a id="form-link" class="form-link" hidden target="_blank" rel="noopener noreferrer">開啟回饋表單（新視窗） ↗</a><p id="feedback-status" role="status" class="status"></p><div id="manual-copy" hidden><label for="copy-text">請長按或選取下方文字後複製</label><textarea id="copy-text" readonly rows="8"></textarea></div></form><aside class="feedback-note"><span aria-hidden="true">♡</span><h3>先聽想法，再做決定</h3><ol><li>家人提出建議</li><li>新人彙整、和兩家討論</li><li>決定是否採納</li><li>更新這一頁，讓大家知道</li></ol><p>不方便打字，也可以請家人代寫。送出建議不代表安排已經改動。</p></aside></div></section>
+<section id="updates"><div class="section-head"><div><p class="eyebrow">06 / 大家都能跟上進度</p><h2>最近確認了什麼</h2></div></div><div id="decisions"></div></section>
+<footer><span aria-hidden="true">囍</span><p>婚禮是一天，家人是一輩子。</p><small>以本頁最新公告為準；出發前請再次確認集合時間與地點。</small><a href="#">回到最上面 ↑</a></footer>
+</main><noscript><p class="notice">請開啟瀏覽器的 JavaScript 以查看日期、流程與分工；也可以請新人提供列印版。</p></noscript>
+</body></html>
