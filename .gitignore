@@ -2,3 +2,5 @@
 preview-*.png
 __pycache__/
 *.xlsx
+digests/
+意見摘要*/
