@@ -22,7 +22,8 @@ const today = new Date();
 const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
 // ---------- 草稿（只存在這支手機）與提案連結 ----------
-const emptyDraft = () => ({ e: {}, ad: [], pr: [], d: {}, n: '', m: '' });
+const emptyDraft = () => ({ e: {}, ad: [], pr: [], d: {}, o: {}, n: '', m: '' });
+const compareOf = pid => phaseById[pid] && phaseById[pid].compare;
 function cleanStr(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
 function cleanAmount(v) { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= 1e8 ? Math.round(n) : undefined; }
 function cleanSplit(s) {
@@ -46,6 +47,7 @@ function sanitize(raw) {
   }
   for (const x of Array.isArray(raw.pr) ? raw.pr.slice(0, 40) : []) if (x && phaseById[x.p] && cleanStr(x.x, 100).trim()) d.pr.push({ p: x.p, x: cleanStr(x.x, 100) });
   for (const [p, t] of Object.entries(raw.d || {})) if (phaseById[p] && cleanStr(t, 100).trim()) d.d[p] = cleanStr(t, 100);
+  for (const [p, id] of Object.entries(raw.o || {})) { const c = compareOf(p); if (c && c.options.some(o => o.id === id)) d.o[p] = id; }
   d.n = cleanStr(raw.n, 40); d.m = cleanStr(raw.m, 2000);
   return d;
 }
@@ -101,6 +103,7 @@ function changeLines() {
   const lines = [];
   for (const p of data.phases) {
     if (draft.d[p.id]) lines.push(`【${p.short}】建議日期：${draft.d[p.id]}`);
+    if (draft.o[p.id]) lines.push(`【${p.short}】比較傾向：${p.compare.options.find(o => o.id === draft.o[p.id]).name}`);
     for (const item of p.budget) {
       const e = draft.e[item.id]; if (!e) continue;
       const parts = [];
@@ -116,7 +119,7 @@ function changeLines() {
   return lines;
 }
 function proposalUrl() {
-  const payload = { v: 1, ver: data.version, t: isoToday, n: draft.n, m: draft.m, e: draft.e, ad: draft.ad, pr: draft.pr, d: draft.d };
+  const payload = { v: 1, ver: data.version, t: isoToday, n: draft.n, m: draft.m, e: draft.e, ad: draft.ad, pr: draft.pr, d: draft.d, o: draft.o };
   return `${location.origin}${location.pathname}#p=${encode(payload)}`;
 }
 function feedbackText() {
@@ -197,6 +200,48 @@ function renderBudgetRow(item) {
   return row;
 }
 
+const sum = (costs, k) => costs.reduce((s, c) => s + c[k], 0);
+function renderCompare(p) {
+  const c = p.compare;
+  const box = node('div', undefined, 'compare'); box.id = `compare-${p.id}`;
+  box.append(node('h3', c.title, 'block-title'), node('p', c.intro, 'section-intro'));
+  const base = Math.min(...c.options.map(o => sum(o.costs, 'mid')));
+  const grid = node('div', undefined, 'compare-grid');
+  for (const o of c.options) {
+    const card = node('article', undefined, 'compare-card');
+    if (draft.o[p.id] === o.id) card.classList.add('picked');
+    card.append(node('h4', o.name), node('p', o.sub, 'compare-sub'));
+    const mid = sum(o.costs, 'mid');
+    const total = node('p', undefined, 'compare-total');
+    total.append(node('span', '多出來約 '), node('strong', wan(mid)), node('span', `（${wan(sum(o.costs, 'low'))}–${wan(sum(o.costs, 'high'))}）`, 'ntd'));
+    card.append(total);
+    if (mid > base) card.append(node('p', `比最省的方案多 ${wan(mid - base)}`, 'compare-delta'));
+    const tl = node('ol', undefined, 'compare-times');
+    for (const [t, what] of o.times) { const li = node('li'); li.append(node('span', t, 'event-time'), node('span', what)); tl.append(li); }
+    card.append(node('p', '時間', 'prep-group'), tl);
+    const ul = node('ul', undefined, 'compare-costs');
+    for (const it of o.costs) {
+      const li = node('li'); li.append(node('span', it.item), node('strong', it.mid ? wan(it.mid) : '不增加'));
+      if (it.src && c.sources[it.src]) li.title = `依據：${c.sources[it.src]}`;
+      ul.append(li);
+    }
+    card.append(node('p', '多出來的費用', 'prep-group'), ul);
+    const pts = node('ul', undefined, 'compare-points'); for (const t of o.points) pts.append(node('li', t)); card.append(pts);
+    if (!readOnly) {
+      const btn = node('button', draft.o[p.id] === o.id ? '✓ 我比較傾向這個' : '我比較傾向這個', 'button small secondary pick'); btn.type = 'button';
+      btn.setAttribute('aria-pressed', String(draft.o[p.id] === o.id));
+      btn.addEventListener('click', () => { if (draft.o[p.id] === o.id) delete draft.o[p.id]; else draft.o[p.id] = o.id; save(); renderAll(); document.getElementById(`compare-${p.id}`)?.scrollIntoView({ block: 'start' }); });
+      card.append(btn);
+    } else if (draft.o[p.id] === o.id) card.append(node('p', '這位家人比較傾向這個', 'pill pill-new'));
+    grid.append(card);
+  }
+  box.append(grid);
+  const concl = node('p', undefined, 'tip'); concl.append(node('strong', '婚顧看法　'), document.createTextNode(c.conclusion)); box.append(concl);
+  box.append(node('p', c.unknown, 'planning-note'));
+  const src = node('ul', undefined, 'fine-print'); for (const t of Object.values(c.sources)) src.append(node('li', `依據：${t}`)); box.append(src);
+  return box;
+}
+
 function renderPhases() {
   const host = $('phases'); host.replaceChildren();
   data.phases.forEach((p, idx) => {
@@ -261,6 +306,7 @@ function renderPhases() {
       right.append(form);
     }
     grid.append(left, right); sec.append(grid);
+    if (p.compare) sec.append(renderCompare(p));
 
     // 預算
     const bud = node('div', undefined, 'phase-budget');
@@ -272,6 +318,7 @@ function renderPhases() {
     bh.append(sub); bud.append(bh);
     const list = node('div', undefined, 'budget-list');
     for (const item of itemsOf(p.id)) list.append(renderBudgetRow(item));
+    if (!list.children.length && p.budgetNote) list.append(node('p', p.budgetNote, 'empty'));
     bud.append(list);
     if (!readOnly) { const add = node('button', '＋ 新增一項預算', 'button secondary add-item'); add.type = 'button'; add.addEventListener('click', () => openEditor(p.id, null)); bud.append(add); }
     sec.append(bud);
@@ -329,7 +376,7 @@ function renderSummary() {
   b.append(bars(PARTIES.map(k => ({ label: data.parties[k], value: pt[k], was: pw[k] })), after));
   grid.append(a, b); host.append(grid);
   const notes = node('ul', undefined, 'fine-print');
-  for (const t of ['大聘是否退回、退多少，由女方家決定；這裡以需先準備的金額計算。', '不含女方家主辦的訂婚宴，以及新人自理、不列金額的項目（戒指、媒人與迎娶紅包等）。', '金額為 2026 年的公開報價與網路實例試算；拿到 2027 年正式報價後會更新。']) notes.append(node('li', t));
+  for (const t of ['大聘 36 萬退不退、退多少、什麼時候退都還沒談；試算先當作不退回，全額算在支出裡。', '不含女方家主辦的訂婚宴，以及新人自理、不列金額的項目（戒指、媒人與迎娶紅包等）。', '所有金額都是試算，不是正式報價，也還沒有付款；拿到 2027 年正式報價後會更新。']) notes.append(node('li', t));
   host.append(notes);
 }
 
@@ -495,7 +542,7 @@ if (readOnly) {
   $('feedback-title').textContent = '這份建議改了哪些地方';
   $('name').disabled = true; $('message').disabled = true;
   $('copy-json').addEventListener('click', async () => {
-    const json = JSON.stringify({ from: draft.n, date: when, baseVersion: ver, message: draft.m, edits: draft.e, added: draft.ad, prepare: draft.pr, dates: draft.d }, null, 2);
+    const json = JSON.stringify({ from: draft.n, date: when, baseVersion: ver, message: draft.m, edits: draft.e, added: draft.ad, prepare: draft.pr, dates: draft.d, prefer: draft.o }, null, 2);
     try { await navigator.clipboard.writeText(json); $('copy-json').textContent = '已複製'; }
     catch (_) { $('manual-copy').hidden = false; $('copy-text').value = json; $('copy-text').select(); location.hash = 'feedback'; }
   });

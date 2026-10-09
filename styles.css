@@ -96,3 +96,18 @@ dialog::backdrop{background:rgba(40,25,25,.45)}
   main{padding-bottom:70px}
 }
 @media print{.jump,.edit-button,.add-item,.add-prep,.date-suggest,.dock,.proposal-banner .banner-actions,.chip-button{display:none!important}.phase,.month,.budget-row{break-inside:avoid}.roadmap{grid-template-columns:repeat(4,1fr)}.phase-grid{grid-template-columns:1fr 1fr}}
+/* 04 版：午宴／晚宴比較 */
+.compare{border:1px solid var(--line);border-radius:10px;padding:22px;background:#fffcf7;margin-bottom:28px}
+.compare-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.compare-card{border:1px solid var(--line);border-radius:10px;background:#fff;padding:18px;display:flex;flex-direction:column}
+.compare-card.picked{border:2px solid var(--wine);background:#fbf3e6}
+.compare-card h4{font-size:1.05rem;margin:0;color:var(--wine)}.compare-sub{font-size:.75rem;color:var(--muted);margin:2px 0 10px}
+.compare-total{margin:0}.compare-total strong{font-size:1.5rem;color:var(--wine);margin-right:6px}
+.compare-delta{font-size:.75rem;color:#7a4a12;margin:2px 0 0}
+.compare-times,.compare-costs,.compare-points{list-style:none;padding:0;margin:0 0 6px;font-size:.8rem}
+.compare-times li{display:grid;grid-template-columns:5.5em 1fr;gap:8px;padding:3px 0}
+.compare-costs li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line)}.compare-costs strong{white-space:nowrap}
+.compare-points{margin-top:10px;color:var(--muted)}.compare-points li{padding:3px 0 3px 14px;position:relative}.compare-points li::before{content:'・';position:absolute;left:0}
+.compare-card .pick{margin-top:auto;width:100%}.compare-card .pick[aria-pressed=true]{background:var(--wine);color:#fff}
+@media(max-width:760px){.compare{padding:16px;margin-left:-4px;margin-right:-4px}.compare-grid{grid-template-columns:1fr}}
+@media print{.compare .pick{display:none}.compare-grid{grid-template-columns:repeat(3,1fr)}}
