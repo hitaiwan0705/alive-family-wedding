@@ -45,11 +45,48 @@ SUMMARY = {
 }
 TITLES = [1, 4, 13, 40, 50, 58, 72]
 
+# 「圖表」工作表：左邊 A–F 是圖表用的整理資料（公式），圖表由 Code.gs 的 setup() 畫在右邊。
+# 看法文字必須和網頁 app.js 的 KINDS 選項一字不差。
+BUDGET_CHOICES = ['太多，可以少一點', '不太夠，要多一點', '金額剛好', '這項可以不用', '想改由誰負擔']
+DATE_CHOICES = ['這天可以', '這天不方便', '想建議別的日子']
+
+def count_cell(col, row, header_row, kind, item_col):
+    # 一列一個 COUNTIFS（不用 ARRAYFORMULA：上傳 .xlsx 轉檔後只會算第一列）
+    return (f'=IF($A{row}="",,COUNTIFS({D}!${item_col}:${item_col},$A{row},'
+            f'{D}!$H:$H,"{kind}",{D}!$L:$L,{col}${header_row}))')
+
+def block(rows, header_row, first, last, cols, kind, item_col, unique_formula):
+    for r in range(first, last + 1):
+        rows[r] = [unique_formula if r == first else ''] + [count_cell(c, r, header_row, kind, item_col) for c in cols]
+
+def chart_rows():
+    rows = {
+        1: ['婚禮小冊・意見圖表'],
+        2: ['家庭會議可以直接投影這一頁。左邊 A–F 欄是圖表用的資料（自動計算），請不要修改。'],
+        4: ['項目'] + BUDGET_CHOICES,
+        33: ['場合'] + DATE_CHOICES,
+        43: ['方案', '則數'],
+    }
+    block(rows, 4, 5, 30, 'BCDEF', '預算', 'J', f'=IFERROR(UNIQUE(FILTER({D}!J:J,{D}!H:H="預算")),)')
+    block(rows, 33, 34, 40, 'BCD', '日期', 'G', f'=IFERROR(UNIQUE(FILTER({D}!G:G,{D}!H:H="日期")),)')
+    for r in range(44, 51):
+        rows[r] = [f'=IFERROR(UNIQUE(FILTER({D}!L:L,{D}!H:H="方案傾向")),)' if r == 44 else '',
+                   f'=IF($A{r}="",,COUNTIFS({D}!$L:$L,$A{r},{D}!$H:$H,"方案傾向"))']
+    return dict(sorted(rows.items()))
+CHARTS = [
+    {'range': 'A4:F30', 'type': 'BAR', 'title': '每一筆花費的看法（則數）', 'stacked': True, 'row': 1, 'col': 8,
+     'colors': ['#713b43', '#c08a3e', '#3e5949', '#9a9a9a', '#4a6fa5']},
+    {'range': 'A33:D40', 'type': 'BAR', 'title': '每一場日期的看法（則數）', 'stacked': True, 'row': 24, 'col': 8,
+     'colors': ['#3e5949', '#713b43', '#c08a3e']},
+    {'range': 'A43:B50', 'type': 'PIE', 'title': '午宴／晚宴：比較傾向', 'stacked': False, 'row': 46, 'col': 8,
+     'colors': ['#713b43', '#3e5949', '#c08a3e', '#4a6fa5']},
+]
+
 GUIDE = [
     ['這份試算表怎麼用'],
     [''],
     ['1. 長輩在婚禮小冊網頁按「送出給新人」，意見會自動寫進「意見送出紀錄」和「意見明細」。'],
-    ['2. 「意見整理」是自動統計：哪些花費被說太多、哪些日期不方便、午宴／晚宴的傾向、待處理清單。'],
+    ['2. 「意見整理」是自動統計：哪些花費被說太多、哪些日期不方便、午宴／晚宴的傾向、待處理清單。「圖表」可在家庭會議投影（執行 setup 後出現）。'],
     ['3. 處理後，到「意見明細」最後兩欄填「處理狀態」與「處理說明」。Codex 也可以用 token 讀取與回寫。'],
     [''],
     ['第一次安裝（只做一次）'],
@@ -80,6 +117,15 @@ def build(out):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = 36 if h in ('文字', '項目名稱', '其他想說的話', '處理說明') else 14
     dv = DataValidation(type='list', formula1='"' + ','.join(STATUS) + '"', allow_blank=True)
     wb['意見明細'].add_data_validation(dv); dv.add('Q2:Q5000')
+    charts = wb.create_sheet('圖表', 1)
+    for r, cells in chart_rows().items():
+        for c, v in enumerate(cells, start=1):
+            if v != '':  # 空字串會擋住 UNIQUE 往下展開
+                charts.cell(row=r, column=c, value=v)
+    charts.cell(row=1, column=1).font = Font(bold=True, size=16, color='713B43')
+    for r in (4, 33, 43):
+        for cell in charts[r]: cell.font = Font(bold=True)
+    charts.column_dimensions['A'].width = 26
     guide = wb.create_sheet('使用說明')
     for row in GUIDE: guide.append(row)
     for r in (1, 7): guide.cell(row=r, column=1).font = Font(bold=True, size=13, color='713B43')
@@ -92,6 +138,8 @@ def sync_code():
     block = ('// ---- 由 build_template.py 產生，請勿手動修改 ----\n'
              f'var SUMMARY = {json.dumps(rows, ensure_ascii=False)};\n'
              f'var SUMMARY_TITLES = {json.dumps(TITLES)};\n'
+             f'var CHART_DATA = {json.dumps([[r, cells] for r, cells in chart_rows().items()], ensure_ascii=False)};\n'
+             f'var CHARTS = {json.dumps(CHARTS, ensure_ascii=False)};\n'
              '// ---- 產生區塊結束 ----\n')
     text = code.read_text(encoding='utf-8')
     pattern = re.compile(r'// ---- 由 build_template\.py 產生.*?// ---- 產生區塊結束 ----\n', re.S)
