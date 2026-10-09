@@ -14,6 +14,7 @@ var SHEET_SUBMISSIONS = '意見送出紀錄';
 var SHEET_OPINIONS = '意見明細';
 var SHEET_SUMMARY = '意見整理';
 var SHEET_CHARTS = '圖表';
+var SHEET_AGENDA = '會議議程';
 var SUB_HEADERS = ['送出時間', '送出編號', '稱呼', '頁面版本', '意見則數', '其他想說的話', '原本合計', '照意見合計', '檢視連結', '原始資料'];
 var OP_HEADERS = ['送出時間', '送出編號', '意見編號', '稱呼', '頁面版本', '場合代碼', '場合', '類型', '項目代碼', '項目名稱', '看法代碼', '看法', '原本金額', '建議金額', '由誰負擔', '文字', '處理狀態', '處理說明'];
 var STATUS = ['待處理', '採納', '部分採納', '不採納', '已回覆'];
@@ -31,6 +32,7 @@ function setup() {
   op.getRange(2, OP_HEADERS.indexOf('處理狀態') + 1, op.getMaxRows() - 1, 1).setDataValidation(rule);
   buildSummary_(ss);
   buildCharts_(ss);
+  buildAgenda_(ss);
   var props = PropertiesService.getScriptProperties();
   if (!props.getProperty('READ_TOKEN')) props.setProperty('READ_TOKEN', Utilities.getUuid().replace(/-/g, ''));
   Logger.log('讀取用 token（給 Codex）：' + props.getProperty('READ_TOKEN'));
@@ -86,6 +88,7 @@ function receive_(d) {
       opSheet.getRange(start, OP_HEADERS.indexOf('處理狀態') + 1, rows.length, 1).setDataValidation(rule);
     }
     cache.put('sub:' + id, '1', 21600);
+    buildAgenda_(ss);
     return json_({ ok: true, id: id, count: rows.length });
   } finally {
     lock.releaseLock();
@@ -103,6 +106,7 @@ function mark_(d) {
   for (var i = 0; i < ids.length; i++) {
     if (ids[i][0] === d.opinionId) {
       sheet.getRange(i + 2, OP_HEADERS.indexOf('處理狀態') + 1, 1, 2).setValues([[d.status, safe_(str_(d.note, 1000))]]);
+      buildAgenda_(SpreadsheetApp.getActive());
       return json_({ ok: true });
     }
   }
@@ -157,6 +161,102 @@ function buildSummary_(ss) {
   });
   SUMMARY_TITLES.forEach(function (r) { sh.getRange(r, 1).setFontWeight('bold').setFontSize(12); });
   sh.setColumnWidth(1, 220);
+}
+
+/** 選單：打開試算表時出現「婚禮小冊」選單。 */
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('婚禮小冊')
+    .addItem('更新會議議程', 'refreshAgenda')
+    .addItem('重建意見整理與圖表', 'setup')
+    .addToUi();
+}
+function refreshAgenda() { buildAgenda_(SpreadsheetApp.getActive()); }
+
+/** 在「意見明細」改處理狀態時，自動更新會議議程。 */
+function onEdit(e) {
+  if (!e || !e.range) return;
+  var sh = e.range.getSheet();
+  if (sh.getName() !== SHEET_OPINIONS) return;
+  var col = OP_HEADERS.indexOf('處理狀態') + 1;
+  if (e.range.getColumn() <= col && e.range.getLastColumn() >= col) buildAgenda_(sh.getParent());
+}
+
+/**
+ * 「會議議程」：只看「待處理」；同一項目 2 則以上，依看法分歧程度排序，取前三項。
+ * 分歧程度 = 1 −（最多人選的看法則數 ÷ 總則數）。討論題以回答文字比較。
+ * 規則與 feedback_digest.py 的 agenda() 相同。
+ */
+function agendaGroups_(rows) {
+  var H = OP_HEADERS, idx = function (h) { return H.indexOf(h); };
+  var groups = {}, order = [];
+  rows.forEach(function (r) {
+    if (r[idx('處理狀態')] !== '待處理' || r[idx('類型')] === KIND_LABEL.bok) return;
+    var key = [r[idx('場合')], r[idx('類型')], r[idx('項目代碼')], r[idx('項目名稱')]].join('\u0001');
+    if (!groups[key]) { groups[key] = { phase: r[idx('場合')], kind: r[idx('類型')], name: r[idx('項目名稱')], items: [] }; order.push(key); }
+    groups[key].items.push(r);
+  });
+  return order.map(function (k) {
+    var g = groups[k], counts = {}, people = {};
+    g.items.forEach(function (r) {
+      var view = g.kind === KIND_LABEL.q ? String(r[idx('文字')] || '').trim() : (r[idx('看法')] || '（只寫文字）');
+      counts[view] = (counts[view] || 0) + 1;
+      people[r[idx('稱呼')] || '（未留名）'] = 1;
+    });
+    var views = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+    var max = views.length ? counts[views[0]] : 0;
+    var amounts = g.items.map(function (r) { return Number(r[idx('建議金額')]); }).filter(function (n) { return n > 0; });
+    var quotes = g.items.filter(function (r) { return String(r[idx('文字')] || '').trim(); })
+      .map(function (r) { return (r[idx('稱呼')] || '（未留名）') + '：' + String(r[idx('文字')]).trim(); });
+    return {
+      phase: g.phase, kind: g.kind, name: g.name, total: g.items.length, people: Object.keys(people).length,
+      divergence: g.items.length ? 1 - max / g.items.length : 0,
+      views: views.map(function (v) { return v + ' ×' + counts[v]; }).join('、'),
+      amounts: amounts.length ? (Math.min.apply(null, amounts) === Math.max.apply(null, amounts) ? wanText_(amounts[0]) : wanText_(Math.min.apply(null, amounts)) + '–' + wanText_(Math.max.apply(null, amounts))) : '',
+      quotes: quotes.slice(0, 3).join('\n'),
+      ids: g.items.map(function (r) { return r[idx('意見編號')]; }).join(' ')
+    };
+  });
+}
+function agendaRank_(groups) {
+  return groups.filter(function (g) { return g.total >= 2; }).sort(function (a, b) {
+    var ka = a.phase + a.name, kb = b.phase + b.name;
+    return (b.divergence - a.divergence) || (b.total - a.total) || (b.people - a.people) || (ka < kb ? -1 : ka > kb ? 1 : 0);
+  });
+}
+function divergenceLabel_(d) { return d >= 0.5 ? '意見分歧大' : d > 0 ? '有不同意見' : '看法一致'; }
+function wanText_(n) { return n >= 10000 ? (Math.round(n / 100) / 100) + ' 萬' : n + ' 元'; }
+
+function buildAgenda_(ss) {
+  var sh = ss.getSheetByName(SHEET_AGENDA) || ss.insertSheet(SHEET_AGENDA, 0);
+  var op = ensureSheet_(ss, SHEET_OPINIONS, OP_HEADERS);
+  var last = op.getLastRow();
+  var rows = last > 1 ? op.getRange(2, 1, last - 1, OP_HEADERS.length).getValues() : [];
+  var groups = agendaGroups_(rows);
+  var ranked = agendaRank_(groups);
+  var top = ranked.slice(0, 3);
+  var rest = groups.filter(function (g) { return top.indexOf(g) < 0; });
+  var out = [];
+  out.push(['這次家庭會議要決定的事', '', '', '', '', '', '', '', '', '']);
+  out.push(['自動產生：' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm') + '。只看「待處理」的意見；同一項目 2 則以上，依看法分歧程度排序。會議決定後，到「意見明細」改處理狀態，這一頁會自動更新。', '', '', '', '', '', '', '', '', '']);
+  out.push(['', '', '', '', '', '', '', '', '', '']);
+  out.push(['順序', '場合', '項目', '則數', '人數', '分歧程度', '看法分布', '建議金額', '長輩原話', '意見編號']);
+  if (!top.length) out.push(['', '目前沒有 2 則以上的待處理意見，不需要排議程。', '', '', '', '', '', '', '', '']);
+  top.forEach(function (g, i) {
+    out.push([i + 1, g.phase, g.name, g.total, g.people, divergenceLabel_(g.divergence), g.views, g.amounts, g.quotes, g.ids]);
+  });
+  out.push(['', '', '', '', '', '', '', '', '', '']);
+  out.push(['其他待處理（還沒排進議程）', '', '', '', '', '', '', '', '', '']);
+  out.push(['', '場合', '項目', '則數', '人數', '分歧程度', '看法分布', '建議金額', '長輩原話', '意見編號']);
+  if (!rest.length) out.push(['', '（沒有）', '', '', '', '', '', '', '', '']);
+  rest.forEach(function (g) {
+    out.push(['', g.phase, g.name, g.total, g.people, divergenceLabel_(g.divergence), g.views, g.amounts, g.quotes, g.ids]);
+  });
+  sh.clear();
+  sh.getRange(1, 1, out.length, 10).setValues(out.map(function (r) { return r.map(function (v) { return typeof v === 'string' ? safe_(v) : v; }); }));
+  sh.getRange(1, 1).setFontWeight('bold').setFontSize(16);
+  sh.getRange(4, 1, 1, 10).setFontWeight('bold');
+  sh.getRange(5 + Math.max(top.length, 1) + 1, 1, 2, 10).setFontWeight('bold');
+  sh.setColumnWidth(3, 180); sh.setColumnWidth(7, 220); sh.setColumnWidth(9, 280);
 }
 
 /** 「圖表」工作表：A–F 欄放公式整理的資料，右邊畫三張圖（可投影）。每次 setup 會重建。 */

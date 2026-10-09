@@ -397,7 +397,8 @@ function renderPhases() {
     const pending = p.budget.filter(i => needsAsk(i) && !draft.e[i.id]).length;
     const bok = draft.c[`bok:${p.id}`];
     if (!readOnly && (pending || bok)) {
-      const b = node('button', bok ? '✓ 其他花費都沒意見（再按一下取消）' : `其他 ${pending} 筆花費都沒意見`, `button small secondary bok${bok ? ' on' : ''}`); b.type = 'button';
+      const label = p.budget.some(i => draft.e[i.id]) ? `其他 ${pending} 筆花費都沒意見` : '這一場的花費都沒意見';
+      const b = node('button', bok ? `✓ ${label}（再按一下取消）` : label, `button small secondary bok${bok ? ' on' : ''}`); b.type = 'button';
       b.setAttribute('aria-pressed', String(!!bok));
       b.addEventListener('click', () => { const before = snapshot(); if (bok) delete draft.c[`bok:${p.id}`]; else draft.c[`bok:${p.id}`] = { f: 'ok' }; commit(bok ? '已取消' : `已記下：${p.short || p.label}其他花費都沒意見`, before, `budget-${p.id}`); });
       bud.append(b);

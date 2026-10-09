@@ -45,6 +45,8 @@ Codex   ──GET（token）──▶ 同一個網址 ──讀出 JSON／CSV
 
 **意見整理**（全部是公式）：總覽數字、每筆預算的看法、每場日期的看法、午宴／晚宴傾向、依類型統計、待處理清單。版面定義在 `build_template.py`，執行它會同步更新 `Code.gs` 的 `SUMMARY`。
 
+**會議議程**：只看「待處理」，同一項目 2 則以上，依看法分歧程度（1 −最多人選的看法比例）排序，列出前三項與其他待處理；每次收到意見、回寫狀態、或在「意見明細」改處理狀態時自動更新，也可從選單「婚禮小冊 → 更新會議議程」手動更新。`feedback_digest.py` 的「會議先談這三項」用同一套規則。
+
 **圖表**：每筆花費的看法（堆疊長條）、每場日期的看法（堆疊長條）、午宴／晚宴傾向（圓餅），可在家庭會議投影。左側 A–F 欄是自動計算的圖表資料。由 `setup()` 建立；版面同樣定義在 `build_template.py`。
 
 **意見送出紀錄**（一次送出一列）：含其他想說的話、預算合計（原本／照意見）、可在網頁上檢視的連結、原始資料 JSON。
@@ -70,6 +72,16 @@ curl -L -X POST "$ENDPOINT" -H 'Content-Type: text/plain' \
 - `ENDPOINT` 就是 `config.js` 的網址；`TOKEN` 只放在 Codex 的環境變數，不要提交進儲存庫。
 - 沒有 token 時一律回 `{"ok":false,"error":"forbidden"}`，所以網址公開也讀不到內容。
 - 採納流程：讀「待處理」→ 改 `content.js`（更新 `version`、`decisions`）→ 回寫狀態。
+
+## 自動測試
+
+`tests/e2e.js` 在本機跑完整流程：三位長輩用手機送出（含斷線重送）→ `Code.gs`（以 `tests/gas_server.js` 模擬 Apps Script 與 302 轉址）→ 試算表 → 會議議程 → `feedback_digest.py` 摘要 → 回寫狀態。
+
+```bash
+NODE_PATH=<含 playwright 的 node_modules> node tests/e2e.js
+```
+
+限制：試算表公式（意見整理、圖表資料）不在模擬器內計算，已另外用真實 Google 試算表驗證過。
 
 ## 防護與限制
 
