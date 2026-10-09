@@ -12,6 +12,7 @@
 
 var SHEET_SUBMISSIONS = '意見送出紀錄';
 var SHEET_OPINIONS = '意見明細';
+var SHEET_SUMMARY = '意見整理';
 var SUB_HEADERS = ['送出時間', '送出編號', '稱呼', '頁面版本', '意見則數', '其他想說的話', '原本合計', '照意見合計', '檢視連結', '原始資料'];
 var OP_HEADERS = ['送出時間', '送出編號', '意見編號', '稱呼', '頁面版本', '場合代碼', '場合', '類型', '項目代碼', '項目名稱', '看法代碼', '看法', '原本金額', '建議金額', '由誰負擔', '文字', '處理狀態', '處理說明'];
 var STATUS = ['待處理', '採納', '部分採納', '不採納', '已回覆'];
@@ -27,6 +28,7 @@ function setup() {
   var op = ensureSheet_(ss, SHEET_OPINIONS, OP_HEADERS);
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUS, true).setAllowInvalid(false).build();
   op.getRange(2, OP_HEADERS.indexOf('處理狀態') + 1, op.getMaxRows() - 1, 1).setDataValidation(rule);
+  buildSummary_(ss);
   var props = PropertiesService.getScriptProperties();
   if (!props.getProperty('READ_TOKEN')) props.setProperty('READ_TOKEN', Utilities.getUuid().replace(/-/g, ''));
   Logger.log('讀取用 token（給 Codex）：' + props.getProperty('READ_TOKEN'));
@@ -107,6 +109,7 @@ function mark_(d) {
 
 function doGet(e) {
   var p = e && e.parameter || {};
+  if (p.ping) return json_({ ok: true, service: 'alive-feedback', v: 1 }); // 連線檢查，不回傳任何資料
   if (!tokenOk_(p.token)) return json_({ ok: false, error: 'forbidden' });
   var view = p.view === 'submissions' ? SHEET_SUBMISSIONS : SHEET_OPINIONS;
   var headers = view === SHEET_SUBMISSIONS ? SUB_HEADERS : OP_HEADERS;
@@ -128,6 +131,30 @@ function doGet(e) {
   return json_({ ok: true, view: view, headers: headers, rows: rows.map(function (r) {
     var o = {}; headers.forEach(function (h, i) { o[h] = r[i]; }); return o;
   }) });
+}
+
+/** 安裝後手動執行一次：寫入一筆測試意見，並標成「已回覆」，確認整條流程可用（可直接刪除那幾列）。 */
+function testSubmit() {
+  var id = 'test' + Utilities.getUuid().replace(/-/g, '').slice(0, 12);
+  var res = JSON.parse(receive_({ v: 1, id: id, name: '安裝測試', version: 'test', message: '這是安裝測試，可以刪除', before: 0, after: 0, url: '', raw: {}, hp: '',
+    opinions: [{ phaseId: 'test', phaseLabel: '測試', kind: 'q', targetId: 'q:test', targetName: '安裝測試', choiceLabel: '回答', text: '看到這列代表收件正常' }] }).getContent());
+  if (res.ok) mark_({ token: PropertiesService.getScriptProperties().getProperty('READ_TOKEN'), opinionId: id + '-1', status: '已回覆', note: '安裝測試，可刪除' });
+  Logger.log(JSON.stringify(res));
+}
+
+/** 「意見整理」工作表：全部用公式，意見明細一更新就跟著變。 */
+function buildSummary_(ss) {
+  var sh = ss.getSheetByName(SHEET_SUMMARY) || ss.insertSheet(SHEET_SUMMARY, 0);
+  sh.clear();
+  SUMMARY.forEach(function (row, i) {
+    row.forEach(function (v, j) {
+      if (v === '') return;
+      var cell = sh.getRange(i + 1, j + 1);
+      if (String(v).charAt(0) === '=') cell.setFormula(v); else cell.setValue(v);
+    });
+  });
+  SUMMARY_TITLES.forEach(function (r) { sh.getRange(r, 1).setFontWeight('bold').setFontSize(12); });
+  sh.setColumnWidth(1, 220);
 }
 
 // ---------- 工具 ----------
@@ -158,3 +185,8 @@ function num_(v) { var n = Number(v); return v === '' || v === null || v === und
 function safe_(s) { return /^[=+\-@\t\r]/.test(s) ? "'" + s : s; }
 function csvCell_(v) { var s = String(v === null || v === undefined ? '' : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+
+// ---- 由 build_template.py 產生，請勿手動修改 ----
+var SUMMARY = [["婚禮小冊・長輩意見整理", ""], ["這一頁全部是公式，「意見明細」有新資料就會自動更新，請不要在這一頁打字。要標記處理結果，請到「意見明細」最後兩欄。", ""], ["", ""], ["總覽", ""], ["送出次數", "=MAX(0,COUNTA('意見送出紀錄'!B:B)-1)"], ["意見則數", "=MAX(0,COUNTA('意見明細'!C:C)-1)"], ["留意見的人數", "=MAX(0,COUNTUNIQUE('意見明細'!D:D)-1)"], ["待處理", "=COUNTIF('意見明細'!Q:Q,\"待處理\")"], ["已採納（含部分採納）", "=COUNTIF('意見明細'!Q:Q,\"採納\")+COUNTIF('意見明細'!Q:Q,\"部分採納\")"], ["不採納", "=COUNTIF('意見明細'!Q:Q,\"不採納\")"], ["最近一次送出", "=IF(COUNTA('意見送出紀錄'!A:A)<2,\"（還沒有）\",TEXT(MAX('意見送出紀錄'!A:A),\"yyyy-mm-dd hh:mm\"))"], ["", ""], ["預算：每一筆花費的看法（則數）", ""], ["=IFERROR(QUERY('意見明細'!A:R,\"select J, count(C) where H = '預算' group by J pivot L label J '項目'\",1),\"（還沒有資料）\")", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["日期：每一場的看法（則數）", ""], ["=IFERROR(QUERY('意見明細'!A:R,\"select G, count(C) where H = '日期' group by G pivot L label G '場合'\",1),\"（還沒有資料）\")", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["午宴／晚宴：比較傾向（則數）", ""], ["=IFERROR(QUERY('意見明細'!A:R,\"select L, count(C) where H = '方案傾向' group by L label L '方案', count(C) '則數'\",1),\"（還沒有資料）\")", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["依類型（則數）", ""], ["=IFERROR(QUERY('意見明細'!A:R,\"select H, count(C) where H <> '' group by H order by count(C) desc label H '類型', count(C) '則數'\",1),\"（還沒有資料）\")", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["", ""], ["待處理清單（最新在上）", ""], ["=IFERROR(QUERY('意見明細'!A:R,\"select A, D, G, J, L, N, P where Q = '待處理' order by A desc label A '送出時間', D '稱呼', G '場合', J '項目', L '看法', N '建議金額', P '文字' format A 'yyyy-mm-dd hh:mm'\",1),\"（目前沒有待處理的意見）\")", ""]];
+var SUMMARY_TITLES = [1, 4, 13, 40, 50, 58, 72];
+// ---- 產生區塊結束 ----

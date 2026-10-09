@@ -712,6 +712,8 @@ if (ENDPOINT) {
   $('other-ways-summary').textContent = '送不出去？改用 LINE 或其他方式';
   $('howto-send-title').textContent = '送出給新人';
   $('howto-send-text').textContent = '全部看完，到最下面按「送出給新人」，一按就送到。';
+  $('howto-privacy').textContent = '意見會先記在您的手機裡；按「送出給新人」後，才會存進新人的 Google 試算表，只有新人看得到，也不會改到這一頁。';
+  $('sheet-help').textContent = '按一下就會存進新人的 Google 試算表（只有新人看得到），不用開 LINE。';
 }
 async function sendToSheet() {
   const list = opinions();
