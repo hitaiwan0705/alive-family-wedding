@@ -1,2 +1,4 @@
 .DS_Store
 preview-*.png
+__pycache__/
+*.xlsx
