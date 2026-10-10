@@ -92,7 +92,7 @@ async function send(page, name) {
   check(await a.page.locator('#sent-panel').isVisible(), '大姑：看到「已送到新人那裡」');
   check(await a.page.locator('.opinion-item').count() === 0, '大姑：送出後清單清空');
 
-  // 舅舅：大聘剛好、喜餅男方與新人各半、傾向午宴、提親日期可以
+  // 舅舅：大聘剛好、喜餅可以不用、傾向午宴、提親日期可以
   await elder('舅舅', {}, async p => {
     // 「我有意見」視窗不再列「金額剛好」：同意要直接按旁邊的「合理，OK」
     await p.locator('.budget-row', { hasText: '大聘' }).first().locator('.opinion-button').click();
@@ -100,7 +100,10 @@ async function send(page, name) {
     await p.click('#sheet-close');
     await okay(p, '.budget-row:has-text("大聘")');
     check(await p.locator('.budget-row:has-text("大聘") .pair-ok').first().getAttribute('aria-pressed') === 'true', '按「合理，OK」後按鈕呈現已選');
-    await opine(p, '喜餅（', '想改由誰負擔', { who: '各半' });
+    await p.locator('.budget-row', { hasText: '喜餅（' }).first().locator('.opinion-button').click();
+    check(await p.locator('#sheet .choice:has-text("想改由誰負擔")').count() === 0 && await p.locator('#sheet-who').count() === 0, '預算意見不再有「改由誰負擔」');
+    await p.click('#sheet .choice:has-text("這項可以不用")');
+    await p.click('#sheet-form button[type=submit]');
     await pick(p, 0);
     check(await p.locator('.question .scope-both').count() > 0 && await p.locator('.question .scope-couple').count() > 0, '「一起商量」每題標出兩家商量或擬定');
     await qChoice(p, 1, '合適');
@@ -152,7 +155,8 @@ async function send(page, name) {
   const qRows = op.filter(r => r[col('類型')] === '一起商量' && r[col('看法')] === '合適');
   check(qRows.length === 2 && qRows.every(r => String(r[col('項目名稱')]).includes('6 人')), '「一起商量」選項寫入試算表「看法」欄（2 則「合適」）');
   check(op.some(r => r[col('類型')] === '其他花費都沒意見' && r[col('場合')] === '結婚'), '「其他花費都沒意見」有寫入');
-  check(op.some(r => r[col('由誰負擔')] === '男方、新人各半'), '「由誰負擔」有寫入');
+  check(op.every(r => r[col('由誰負擔')] === ''), '「由誰負擔」欄保留但不再寫入');
+  check(op.some(r => r[col('項目代碼')] === 'B-005' && r[col('看法')] === '這項可以不用'), '喜餅「這項可以不用」有寫入');
   check(op.every(r => r[col('處理狀態')] === '待處理'), '新意見預設「待處理」');
   check(['意見整理', '圖表', '會議議程'].every(n => dump.order.includes(n)) && dump.sheets['圖表'].charts === 3, 'setup 建立整理、圖表（3 張）、會議議程');
   check(dump.timeZone === 'Asia/Taipei', 'setup 把試算表時區設為台北');

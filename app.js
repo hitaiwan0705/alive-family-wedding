@@ -4,9 +4,6 @@ const data = window.WEDDING;
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const n = document.createElement(tag); if (text !== undefined && text !== null) n.textContent = text; if (className) n.className = className; return n; };
 const phases = (data.phases || []).map(p => ({ candidates: [], schedule: [], prepare: [], budget: [], ...p }));
-// 這一份是男方家的預算：負擔方只有男方與新人（content.js 的 parties 可覆寫）
-const PARTIES = Object.keys(data.parties || { groom: '男方', couple: '新人' });
-const partyName = k => (data.parties || {})[k] || k;
 const STORE_KEY = 'alive-wedding-draft-v2';
 const ENDPOINT = (() => { const u = ((window.SITE_CONFIG || {}).sheetEndpoint || '').trim(); return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u) ? u : ''; })();
 const OLD_STORE_KEY = 'alive-wedding-draft-v1';
@@ -25,9 +22,8 @@ const KINDS = {
   prep: { label: '準備清單', title: '對準備清單的意見', choices: [['ok', '清單沒問題'], ['add', '我想補充一項'], ['who', '分工想調整']], placeholder: '例如：要準備讓長輩休息的椅子' },
   bok: { label: '其他花費', button: '其他花費都沒意見', title: '其他花費', choices: [['ok', '都沒意見']] },
   q: { label: '一起商量', button: '回答這題', title: '回答這一題', choices: [], placeholder: '想到什麼都可以說，例如：我覺得 7/24 比較好' },
-  budget: { label: '預算', title: '對這筆花費的意見', choices: [['ok', '金額剛好'], ['less', '太多，可以少一點'], ['more', '不太夠，要多一點'], ['drop', '這項可以不用'], ['who', '想改由誰負擔']] }
+  budget: { label: '預算', title: '對這筆花費的意見', choices: [['ok', '金額剛好'], ['less', '太多，可以少一點'], ['more', '不太夠，要多一點'], ['drop', '這項可以不用']] }
 };
-const WHO = [['groom', `${partyName('groom')}全出`, { groom: 100 }], ['couple', `${partyName('couple')}全出`, { couple: 100 }], ['half', `${partyName('groom')}、${partyName('couple')}各半`, { groom: 50, couple: 50 }], ['other', '其他（請寫在下面）', null]];
 const choiceLabel = (kind, f) => (KINDS[kind].choices.find(c => c[0] === f) || [])[1] || '';
 // 字串雜湊：讓「一起商量」的題目不必有 id，Codex 改字也不會弄丟已寫的回答（回答內附原題目）
 function hashOf(str) { let h = 5381; for (const ch of str) h = ((h << 5) + h + ch.codePointAt(0)) >>> 0; return h.toString(36); }
@@ -45,7 +41,6 @@ function needsAsk(x) {
   const st = x.status || '';
   return !(st.includes('已確認') && !st.includes('待'));
 }
-const whoLabel = w => (WHO.find(x => x[0] === w) || [])[1] || '';
 
 // ---------- 格式 ----------
 const ntd = n => `NT$${Math.round(n).toLocaleString('zh-TW')}`;
@@ -55,7 +50,6 @@ function wan(n) {
   return `${parseFloat((n / 10000).toFixed(2))} 萬`;
 }
 const signedWan = n => (n > 0 ? '多 ' : '少 ') + wan(Math.abs(n));
-const splitText = s => PARTIES.filter(k => s && s[k]).map(k => `${partyName(k)} ${s[k]}%`).join('、') || '待定';
 const today = new Date();
 const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -68,7 +62,7 @@ function icon() {
 }
 
 // ---------- 意見草稿（只存在這支手機）與提案連結 ----------
-// e：預算項目 {f 看法, a 建議金額, w 由誰負擔, t 文字}；ad：新增項目；c：日期／行程／準備清單 {f, t}；o：方案傾向
+// e：預算項目 {f 看法, a 建議金額, t 文字}（不分男方／新人負擔，是同一筆錢）；ad：新增項目；c：日期／行程／準備清單 {f, t}；o：方案傾向
 const emptyDraft = () => ({ e: {}, ad: [], c: {}, o: {}, q: {}, n: '', m: '' });
 const cleanStr = (v, max) => typeof v === 'string' ? v.slice(0, max) : '';
 function cleanAmount(v) { const n = Number(v); return v !== '' && v !== null && Number.isFinite(n) && n >= 0 && n <= 1e8 ? Math.round(n) : undefined; }
@@ -80,9 +74,8 @@ function sanitize(raw) {
     const base = baseItems[id];
     if (!base || base.locked || !e || typeof e !== 'object') continue;
     const x = {}; const a = cleanAmount(e.a);
-    x.f = validChoice('budget', e.f) || (e.r ? 'drop' : a !== undefined ? (a < (base.amount || 0) ? 'less' : 'more') : e.s ? 'who' : undefined);
+    x.f = validChoice('budget', e.f) || (e.r ? 'drop' : a !== undefined ? (a < (base.amount || 0) ? 'less' : 'more') : undefined);
     if (a !== undefined && (x.f === 'less' || x.f === 'more')) x.a = a;
-    if (x.f === 'who' && WHO.some(w => w[0] === e.w)) x.w = e.w;
     const t = cleanStr(e.t || e.c, 500).trim(); if (t) x.t = t;
     if (!x.f) delete x.f;
     if (x.f || x.t) d.e[id] = x;
@@ -91,7 +84,6 @@ function sanitize(raw) {
     if (!a || !phaseById[a.p] || !cleanStr(a.nm, 40).trim()) continue;
     const x = { id: cleanStr(a.id, 20) || `n${d.ad.length}`, p: a.p, nm: cleanStr(a.nm, 40).trim() };
     const amt = cleanAmount(a.a); if (amt !== undefined) x.a = amt;
-    if (WHO.some(w => w[0] === a.w)) x.w = a.w;
     const t = cleanStr(a.t || a.c, 500).trim(); if (t) x.t = t;
     d.ad.push(x);
   }
@@ -146,34 +138,26 @@ function save() {
 function effective(item) {
   const e = draft.e[item.id];
   if (!e) return { ...item };
-  const who = e.w && WHO.find(w => w[0] === e.w);
-  return { ...item, amount: e.a ?? item.amount, split: (who && who[2]) || item.split, removed: e.f === 'drop', opinion: e };
+  return { ...item, amount: e.a ?? item.amount, removed: e.f === 'drop', opinion: e };
 }
 function itemsOf(pid, useDraft = true) {
   const base = phaseById[pid].budget.map(i => ({ ...i, phase: pid }));
   if (!useDraft) return base;
   const list = base.map(effective);
   for (const a of draft.ad.filter(a => a.p === pid)) {
-    const who = a.w && WHO.find(w => w[0] === a.w);
-    list.push({ id: a.id, phase: pid, name: a.nm, amount: a.a, split: (who && who[2]) || {}, added: a, status: '家人新增' });
+    list.push({ id: a.id, phase: pid, name: a.nm, amount: a.a, added: a, status: '家人新增' });
   }
   return list;
 }
 const counts = i => !i.removed && !i.locked && typeof i.amount === 'number';
 const phaseTotal = (pid, useDraft = true) => itemsOf(pid, useDraft).filter(counts).reduce((s, i) => s + i.amount, 0);
 const grandTotal = (useDraft = true) => phases.reduce((s, p) => s + phaseTotal(p.id, useDraft), 0);
-function partyTotals(useDraft = true) {
-  const t = Object.fromEntries(PARTIES.map(k => [k, 0]));
-  for (const p of phases) for (const i of itemsOf(p.id, useDraft).filter(counts)) for (const k of PARTIES) t[k] += i.amount * ((i.split || {})[k] || 0) / 100;
-  return t;
-}
 
 // ---------- 意見清單（同一份資料給畫面與 LINE 文字） ----------
 function opinionText(kind, o, item) {
   const parts = [];
   if (o.f) parts.push(choiceLabel(kind, o.f));
   if (kind === 'budget' && o.a !== undefined) parts.push(`建議 ${wan(o.a)}`);
-  if (o.w) parts.push(`改成 ${whoLabel(o.w)}`);
   let s = parts.join('，');
   if (o.t) s += (s ? '——' : '') + o.t;
   return s || (item ? '' : '');
@@ -193,11 +177,11 @@ function opinions() {
     }
     for (const item of p.budget) {
       const o = draft.e[item.id]; if (!o) continue;
-      push(p, item.name, opinionText('budget', o), { kind: 'budget', targetId: item.id, choice: o.f || '', choiceLabel: choiceLabel('budget', o.f), amount: o.a ?? '', baseAmount: item.amount ?? '', who: o.w ? whoLabel(o.w) : '', text: o.t || '' }, () => openSheet({ kind: 'budget', pid: p.id, id: item.id }), () => { delete draft.e[item.id]; });
+      push(p, item.name, opinionText('budget', o), { kind: 'budget', targetId: item.id, choice: o.f || '', choiceLabel: choiceLabel('budget', o.f), amount: o.a ?? '', baseAmount: item.amount ?? '', text: o.t || '' }, () => openSheet({ kind: 'budget', pid: p.id, id: item.id }), () => { delete draft.e[item.id]; });
     }
     for (const a of draft.ad.filter(a => a.p === p.id)) {
-      const bits = [a.a !== undefined ? `約 ${wan(a.a)}` : '', a.w ? whoLabel(a.w) : ''].filter(Boolean).join('，');
-      push(p, `想加一項：${a.nm}`, bits + (a.t ? (bits ? '——' : '') + a.t : ''), { kind: 'add', targetId: a.id, targetName: a.nm, choice: 'add', choiceLabel: '想加一項花費', amount: a.a ?? '', who: a.w ? whoLabel(a.w) : '', text: a.t || '' }, () => openSheet({ kind: 'add', pid: p.id, id: a.id }), () => { draft.ad = draft.ad.filter(x => x !== a); });
+      const bits = a.a !== undefined ? `約 ${wan(a.a)}` : '';
+      push(p, `想加一項：${a.nm}`, bits + (a.t ? (bits ? '——' : '') + a.t : ''), { kind: 'add', targetId: a.id, targetName: a.nm, choice: 'add', choiceLabel: '想加一項花費', amount: a.a ?? '', text: a.t || '' }, () => openSheet({ kind: 'add', pid: p.id, id: a.id }), () => { draft.ad = draft.ad.filter(x => x !== a); });
     }
   }
   const qPhase = { id: 'questions', short: '一起商量', label: '一起商量' };
@@ -259,7 +243,7 @@ function opinionButton(label, onClick, has, about, hasLabel = '改我的意見')
   return b;
 }
 // 同位階的兩顆按鈕：「合理，OK」一按就記下（再按取消），「我有意見」打開視窗只選不同意見
-const isOkOnly = o => !!o && o.f === 'ok' && !o.t && o.a === undefined && !o.w;
+const isOkOnly = o => !!o && o.f === 'ok' && !o.t && o.a === undefined;
 function opinionPair(o, about, onOk, onMore) {
   const wrap = node('div', undefined, 'opinion-pair'); wrap.setAttribute('role', 'group'); wrap.setAttribute('aria-label', `對「${about}」的看法`);
   const okOn = !!o && o.f === 'ok';
@@ -315,7 +299,6 @@ function renderBudgetRow(item) {
   const base = baseItems[item.id];
   if (base && item.opinion && typeof base.amount === 'number' && item.amount !== base.amount) row.append(node('p', `原本 ${wan(base.amount)}`, 'was'));
   if (!item.locked && typeof item.amount === 'number' && !item.added) { const bar = rangeBar(item); if (bar) { bar.classList.add('more'); row.append(bar); } }
-  row.append(node('p', `由誰負擔：${splitText(item.split)}`, 'who more'));
   if (item.note) row.append(node('p', item.note, 'note'));
   if (item.opinion && (readOnly || !isOkOnly(item.opinion))) row.append(myNote(opinionText('budget', item.opinion)));
   if (item.added && item.added.t) row.append(myNote(item.added.t));
@@ -488,10 +471,7 @@ function renderSummary() {
   const grid = node('div', undefined, 'summary-grid');
   const a = node('div'); a.append(node('h3', '依每一件事分', 'block-title'));
   a.append(bars(phases.map(p => ({ label: p.short || p.label, value: phaseTotal(p.id), was: phaseTotal(p.id, false) })), after));
-  const pt = partyTotals(true), pw = partyTotals(false);
-  const b = node('div'); b.append(node('h3', '依誰負擔分', 'block-title'));
-  b.append(bars(PARTIES.map(k => ({ label: partyName(k), value: pt[k], was: pw[k] })), after));
-  grid.append(a, b); host.append(grid);
+  grid.append(a); host.append(grid);
   if (data.budgetNotes && data.budgetNotes.length) { const notes = node('ul', undefined, 'fine-print'); for (const t of data.budgetNotes) notes.append(node('li', t)); host.append(notes); }
 }
 
@@ -640,9 +620,7 @@ function setAmount(n) { $('sheet-amount-input').value = n === undefined ? '' : n
 function syncSheet() {
   const f = ctx.f;
   const showAmount = ctx.kind === 'add' || (ctx.kind === 'budget' && (f === 'less' || f === 'more'));
-  const showWho = ctx.kind === 'add' || (ctx.kind === 'budget' && f === 'who');
   $('sheet-amount').hidden = !showAmount;
-  $('sheet-who').hidden = !showWho;
   $('sheet-error').textContent = '';
 }
 function openSheet(target) {
@@ -654,7 +632,7 @@ function openSheet(target) {
   else if (target.kind === 'add') existing = target.id ? draft.ad.find(a => a.id === target.id) : null;
   else if (target.kind === 'q') existing = draft.q[target.key] && { ...draft.q[target.key], f: draft.q[target.key].c };
   else existing = draft.c[`${target.kind}:${target.pid}`];
-  ctx.f = existing && existing.f !== 'ok' ? existing.f : undefined; ctx.w = existing && existing.w;
+  ctx.f = existing && existing.f !== 'ok' ? existing.f : undefined;
 
   $('sheet-title').textContent = target.kind === 'add' ? '我想加一項花費' : target.kind === 'q' ? KINDS.q.title : MORE_TEXT;
   const where = [p ? p.label : '一起商量'];
@@ -668,7 +646,6 @@ function openSheet(target) {
   $('sheet-choices').hidden = target.kind === 'add' || (target.kind === 'q' && !qChoices.length);
   if (qChoices.length) radioGroup($('sheet-choice-list'), 'feel', qChoices, ctx.f, v => { ctx.f = v; });
   if (target.kind !== 'add' && target.kind !== 'q') radioGroup($('sheet-choice-list'), 'feel', KINDS[target.kind].choices.filter(c => c[0] !== 'ok'), ctx.f, v => { ctx.f = v; if ((v === 'less' || v === 'more') && item && $('sheet-amount-input').value === '' && typeof item.amount === 'number') setAmount(item.amount); syncSheet(); });
-  radioGroup($('sheet-who-list'), 'who', WHO.map(w => [w[0], w[1]]), ctx.w, v => { ctx.w = v; });
   setAmount(existing && existing.a !== undefined ? existing.a : undefined);
   const presets = $('sheet-presets'); presets.replaceChildren();
   if (item && typeof item.low === 'number' && item.high > item.low) {
@@ -710,7 +687,7 @@ $('sheet-form').addEventListener('submit', ev => {
     const name = $('sheet-name').value.trim().slice(0, 40);
     if (!name) { $('sheet-error').textContent = '請寫一下是什麼花費，例如「長輩下午茶」。'; $('sheet-name').focus(); return; }
     const x = { id: ctx.id || `n${Date.now().toString(36)}`, p: ctx.pid, nm: name };
-    if (amount !== undefined) x.a = amount; if (ctx.w) x.w = ctx.w; if (text) x.t = text;
+    if (amount !== undefined) x.a = amount; if (text) x.t = text;
     const i = draft.ad.findIndex(a => a.id === x.id); if (i >= 0) draft.ad[i] = x; else draft.ad.push(x);
     anchor = `budget-${ctx.pid}`;
   } else if (ctx.kind === 'q') {
@@ -727,7 +704,6 @@ $('sheet-form').addEventListener('submit', ev => {
         // 以填的金額為準：點「太多」卻填了比原本高的數字（或相反），看法跟著金額改，避免試算表出現矛盾
         if (typeof base.amount === 'number') x.f = amount < base.amount ? 'less' : 'more';
       }
-      if (x.f === 'who' && ctx.w) x.w = ctx.w;
       draft.e[ctx.id] = x; anchor = `budget-${ctx.pid}`;
     } else { draft.c[`${ctx.kind}:${ctx.pid}`] = x; anchor = `${ctx.kind}-${ctx.pid}`; }
   }
