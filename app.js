@@ -30,8 +30,8 @@ const WHO = [['groom', `${partyName('groom')}全出`, { groom: 100 }], ['couple'
 const choiceLabel = (kind, f) => (KINDS[kind].choices.find(c => c[0] === f) || [])[1] || '';
 // 字串雜湊：讓「一起商量」的題目不必有 id，Codex 改字也不會弄丟已寫的回答（回答內附原題目）
 function hashOf(str) { let h = 5381; for (const ch of str) h = ((h << 5) + h + ch.codePointAt(0)) >>> 0; return h.toString(36); }
-// questions 可以是純文字（只能寫回答），或 { q, scope, choices }：scope 標示由誰拍板（both 兩家商量；couple 新人先擬定、請長輩一起出主意），choices 是一按就記下的選項
-const SCOPES = { both: '兩家一起商量', couple: '新人擬定・請您一起出主意' };
+// questions 可以是純文字（只能寫回答），或 { q, scope, choices }：scope 標示由誰拍板（both 兩家商量；couple 先擬定、請長輩一起出主意），choices 是一按就記下的選項
+const SCOPES = { both: '兩家一起商量', couple: '擬定・請您一起出主意' };
 const questionList = () => (data.questions || []).map(x => {
   const o = typeof x === 'string' ? { q: x } : x || {};
   return { key: hashOf(o.q || ''), q: o.q || '', scope: SCOPES[o.scope] ? o.scope : '', choices: Array.isArray(o.choices) ? o.choices.filter(c => typeof c === 'string' && c.trim()) : [] };
@@ -532,7 +532,7 @@ function renderBasket() {
 
 function renderQuestions() {
   const ol = $('questions'); ol.replaceChildren();
-  // 「兩家一起商量」排前面，再來是「新人擬定」；同一類保留 content.js 的順序
+  // 「兩家一起商量」排前面，再來是「擬定」；同一類保留 content.js 的順序
   const list = questionList().map((x, i) => ({ ...x, i })).sort((a, b) => (a.scope === 'couple') - (b.scope === 'couple') || a.i - b.i);
   for (const { key, q, scope, choices } of list) {
     const li = node('li', undefined, 'question'); li.id = `q-${key}`;
