@@ -14,13 +14,17 @@ const baseItems = {};
 for (const p of phases) for (const item of p.budget) baseItems[item.id] = { ...item, phase: p.id };
 
 // ---------- 介面用語（看法選項） ----------
+// 日期、行程、清單、預算：旁邊是兩顆同位階的按鈕「合理，OK」與「我有意見」。
+// choices 第一項 ok 只由「合理，OK」記下（試算表看法欄仍寫原本的字，如「金額剛好」）；「我有意見」視窗只列不同意見。
+const OK_TEXT = '合理，OK';
+const MORE_TEXT = '我有意見';
 const KINDS = {
-  date: { label: '日期', button: '對日期有意見', title: '對日期的意見', choices: [['ok', '這天可以'], ['no', '這天不方便'], ['other', '想建議別的日子']], placeholder: '例如：10/25 比較方便，上午出發比較好' },
-  sched: { label: '當天行程', button: '對行程有意見', title: '對當天行程的意見', choices: [['ok', '這樣安排可以'], ['rush', '時間太趕'], ['change', '想加或減某個步驟']], placeholder: '例如：希望先拍長輩合照，大家比較不用久候' },
-  prep: { label: '準備清單', button: '對準備清單有意見', title: '對準備清單的意見', choices: [['ok', '清單沒問題'], ['add', '我想補充一項'], ['who', '分工想調整']], placeholder: '例如：要準備讓長輩休息的椅子' },
+  date: { label: '日期', title: '對日期的意見', choices: [['ok', '這天可以'], ['no', '這天不方便'], ['other', '想建議別的日子']], placeholder: '例如：10/25 比較方便，上午出發比較好' },
+  sched: { label: '當天行程', title: '對當天行程的意見', choices: [['ok', '這樣安排可以'], ['rush', '時間太趕'], ['change', '想加或減某個步驟']], placeholder: '例如：希望先拍長輩合照，大家比較不用久候' },
+  prep: { label: '準備清單', title: '對準備清單的意見', choices: [['ok', '清單沒問題'], ['add', '我想補充一項'], ['who', '分工想調整']], placeholder: '例如：要準備讓長輩休息的椅子' },
   bok: { label: '其他花費', button: '其他花費都沒意見', title: '其他花費', choices: [['ok', '都沒意見']] },
   q: { label: '一起商量', button: '回答這題', title: '回答這一題', choices: [], placeholder: '想到什麼都可以說，例如：我覺得 7/24 比較好' },
-  budget: { label: '預算', button: '我有意見', title: '對這筆花費的意見', choices: [['ok', '金額剛好'], ['less', '太多，可以少一點'], ['more', '不太夠，要多一點'], ['drop', '這項可以不用'], ['who', '想改由誰負擔']] }
+  budget: { label: '預算', title: '對這筆花費的意見', choices: [['ok', '金額剛好'], ['less', '太多，可以少一點'], ['more', '不太夠，要多一點'], ['drop', '這項可以不用'], ['who', '想改由誰負擔']] }
 };
 const WHO = [['groom', `${partyName('groom')}全出`, { groom: 100 }], ['couple', `${partyName('couple')}全出`, { couple: 100 }], ['bride', `${partyName('bride')}全出`, { bride: 100 }], ['half', `${partyName('groom')}、${partyName('bride')}各半`, { groom: 50, bride: 50 }], ['other', '其他（請寫在下面）', null]];
 const choiceLabel = (kind, f) => (KINDS[kind].choices.find(c => c[0] === f) || [])[1] || '';
@@ -247,6 +251,26 @@ function opinionButton(label, onClick, has, about) {
   b.addEventListener('click', onClick);
   return b;
 }
+// 同位階的兩顆按鈕：「合理，OK」一按就記下（再按取消），「我有意見」打開視窗只選不同意見
+const isOkOnly = o => !!o && o.f === 'ok' && !o.t && o.a === undefined && !o.w;
+function opinionPair(o, about, onOk, onMore) {
+  const wrap = node('div', undefined, 'opinion-pair'); wrap.setAttribute('role', 'group'); wrap.setAttribute('aria-label', `對「${about}」的看法`);
+  const okOn = !!o && o.f === 'ok';
+  const ok = node('button', undefined, `pair-ok${okOn ? ' on' : ''}`); ok.type = 'button';
+  ok.append(node('span', okOn ? `✓ ${OK_TEXT}` : OK_TEXT));
+  ok.setAttribute('aria-pressed', String(okOn));
+  ok.setAttribute('aria-label', okOn ? `「${about}」已選合理，OK，再按一下取消` : `「${about}」合理，OK`);
+  ok.addEventListener('click', onOk);
+  wrap.append(ok, opinionButton(MORE_TEXT, onMore, !!o && !isOkOnly(o), about));
+  return wrap;
+}
+// 按「合理，OK」：沒意見→記下；已是 OK→取消；原本有不同意見→換成 OK（可按復原找回）
+function toggleOk(store, key, about, anchor) {
+  const before = snapshot(); const o = store[key];
+  if (o && o.f === 'ok') { delete store[key]; commit('已取消「合理，OK」', before, anchor); return; }
+  store[key] = { f: 'ok' };
+  commit(o ? `已改成：${about}合理，OK（原本的意見可按「復原」找回）` : `已記下：${about}合理，OK`, before, anchor);
+}
 function myNote(text, who = '我的意見') {
   const p = node('p', undefined, 'mine'); p.append(node('strong', `${readOnly ? '這位家人的意見' : who}：`), document.createTextNode(text));
   return p;
@@ -254,8 +278,9 @@ function myNote(text, who = '我的意見') {
 function sectionOpinion(kind, pid) {
   const key = `${kind}:${pid}`; const o = draft.c[key];
   const wrap = node('div', undefined, 'opinion-slot');
-  if (o) wrap.append(myNote(opinionText(kind, o)));
-  if (!readOnly) wrap.append(opinionButton(KINDS[kind].button, () => openSheet({ kind, pid }), !!o, `${phaseById[pid].short || phaseById[pid].label}的${KINDS[kind].label}`));
+  const about = `${phaseById[pid].short || phaseById[pid].label}的${KINDS[kind].label}`;
+  if (o && (readOnly || !isOkOnly(o))) wrap.append(myNote(opinionText(kind, o)));
+  if (!readOnly) wrap.append(opinionPair(o, about, () => toggleOk(draft.c, key, about, `${kind}-${pid}`), () => openSheet({ kind, pid })));
   return wrap.children.length ? wrap : null;
 }
 
@@ -285,10 +310,11 @@ function renderBudgetRow(item) {
   if (!item.locked && typeof item.amount === 'number' && !item.added) { const bar = rangeBar(item); if (bar) { bar.classList.add('more'); row.append(bar); } }
   row.append(node('p', `由誰負擔：${splitText(item.split)}`, 'who more'));
   if (item.note) row.append(node('p', item.note, 'note'));
-  if (item.opinion) row.append(myNote(opinionText('budget', item.opinion)));
+  if (item.opinion && (readOnly || !isOkOnly(item.opinion))) row.append(myNote(opinionText('budget', item.opinion)));
   if (item.added && item.added.t) row.append(myNote(item.added.t));
   if (!readOnly && !item.locked) {
-    row.append(opinionButton(item.added ? '修改' : KINDS.budget.button, () => openSheet(item.added ? { kind: 'add', pid: item.phase, id: item.id } : { kind: 'budget', pid: item.phase, id: item.id }), !!(item.opinion || item.added), item.name));
+    if (item.added) row.append(opinionButton('修改', () => openSheet({ kind: 'add', pid: item.phase, id: item.id }), true, item.name));
+    else row.append(opinionPair(item.opinion, item.name, () => toggleOk(draft.e, item.id, item.name, `budget-${item.phase}`), () => openSheet({ kind: 'budget', pid: item.phase, id: item.id })));
   }
   return row;
 }
@@ -397,12 +423,12 @@ function renderPhases() {
     const pending = p.budget.filter(i => needsAsk(i) && !draft.e[i.id]).length;
     const bok = draft.c[`bok:${p.id}`];
     if (!readOnly && (pending || bok)) {
-      const label = p.budget.some(i => draft.e[i.id]) ? `其他 ${pending} 筆花費都沒意見` : '這一場的花費都沒意見';
+      const label = p.budget.some(i => draft.e[i.id]) ? `其他 ${pending} 筆都${OK_TEXT}` : `這一場的花費都${OK_TEXT}`;
       const b = node('button', bok ? `✓ ${label}（再按一下取消）` : label, `button small secondary bok${bok ? ' on' : ''}`); b.type = 'button';
       b.setAttribute('aria-pressed', String(!!bok));
-      b.addEventListener('click', () => { const before = snapshot(); if (bok) delete draft.c[`bok:${p.id}`]; else draft.c[`bok:${p.id}`] = { f: 'ok' }; commit(bok ? '已取消' : `已記下：${p.short || p.label}其他花費都沒意見`, before, `budget-${p.id}`); });
+      b.addEventListener('click', () => { const before = snapshot(); if (bok) delete draft.c[`bok:${p.id}`]; else draft.c[`bok:${p.id}`] = { f: 'ok' }; commit(bok ? '已取消' : `已記下：${p.short || p.label}其他花費都${OK_TEXT}`, before, `budget-${p.id}`); });
       bud.append(b);
-    } else if (readOnly && bok) bud.append(node('p', '這位家人表示：其他花費都沒意見', 'mine'));
+    } else if (readOnly && bok) bud.append(node('p', `這位家人表示：其他花費都${OK_TEXT}`, 'mine'));
     if (!readOnly) { const add = node('button', '＋ 我想加一項花費', 'button secondary add-item'); add.type = 'button'; add.addEventListener('click', () => openSheet({ kind: 'add', pid: p.id })); bud.append(add); }
     sec.append(bud);
     host.append(sec);
@@ -468,7 +494,7 @@ function renderBasket() {
   const ul = $('opinion-list'); ul.replaceChildren();
   if (!list.length) {
     const li = node('li', undefined, 'empty-line');
-    li.append(document.createTextNode('還沒有意見。看到想說的地方，按 '), node('span', '我有意見', 'inline-chip'), document.createTextNode(' 就可以。也可以直接在下面寫。'));
+    li.append(document.createTextNode('還沒有意見。每一項旁邊，沒問題按 '), node('span', OK_TEXT, 'inline-chip ok-chip'), document.createTextNode('，有不同想法再按 '), node('span', MORE_TEXT, 'inline-chip'), document.createTextNode('。也可以直接在下面寫。'));
     ul.append(li);
   }
   list.forEach((o, i) => {
@@ -602,9 +628,9 @@ function openSheet(target) {
   else if (target.kind === 'add') existing = target.id ? draft.ad.find(a => a.id === target.id) : null;
   else if (target.kind === 'q') existing = draft.q[target.key];
   else existing = draft.c[`${target.kind}:${target.pid}`];
-  ctx.f = existing && existing.f; ctx.w = existing && existing.w;
+  ctx.f = existing && existing.f !== 'ok' ? existing.f : undefined; ctx.w = existing && existing.w;
 
-  $('sheet-title').textContent = target.kind === 'add' ? '我想加一項花費' : KINDS[target.kind].title;
+  $('sheet-title').textContent = target.kind === 'add' ? '我想加一項花費' : target.kind === 'q' ? KINDS.q.title : MORE_TEXT;
   const where = [p ? p.label : '一起商量'];
   if (item) where.push(item.name, typeof item.amount === 'number' ? `目前 ${wan(item.amount)}` : '');
   else if (target.kind === 'date') where.push(p.when);
@@ -613,7 +639,7 @@ function openSheet(target) {
   $('sheet-name-field').hidden = target.kind !== 'add';
   $('sheet-name').value = target.kind === 'add' && existing ? existing.nm : '';
   $('sheet-choices').hidden = target.kind === 'add' || target.kind === 'q';
-  if (target.kind !== 'add' && target.kind !== 'q') radioGroup($('sheet-choice-list'), 'feel', KINDS[target.kind].choices, ctx.f, v => { ctx.f = v; if ((v === 'less' || v === 'more') && item && $('sheet-amount-input').value === '' && typeof item.amount === 'number') setAmount(item.amount); syncSheet(); });
+  if (target.kind !== 'add' && target.kind !== 'q') radioGroup($('sheet-choice-list'), 'feel', KINDS[target.kind].choices.filter(c => c[0] !== 'ok'), ctx.f, v => { ctx.f = v; if ((v === 'less' || v === 'more') && item && $('sheet-amount-input').value === '' && typeof item.amount === 'number') setAmount(item.amount); syncSheet(); });
   radioGroup($('sheet-who-list'), 'who', WHO.map(w => [w[0], w[1]]), ctx.w, v => { ctx.w = v; });
   setAmount(existing && existing.a !== undefined ? existing.a : undefined);
   const presets = $('sheet-presets'); presets.replaceChildren();
@@ -686,7 +712,7 @@ $('message').addEventListener('input', () => { draft.m = $('message').value.slic
 function nothingToSend(ev) {
   if (opinions().length || draft.m.trim()) return false;
   ev.preventDefault();
-  $('feedback-status').textContent = '還沒有任何意見。可以先在上面按「我有意見」，或在「其他想說的話」寫下來。';
+  $('feedback-status').textContent = '還沒有任何意見。可以先在上面按「合理，OK」或「我有意見」，或在「其他想說的話」寫下來。';
   return true;
 }
 $('line-button').addEventListener('click', ev => { if (!nothingToSend(ev)) $('feedback-status').textContent = '正在開啟 LINE：請選新人（或家族群組），再按「傳送」。傳完後，可以按最下面的「清空，重新開始」。'; });
@@ -728,7 +754,7 @@ if (ENDPOINT) {
 }
 async function sendToSheet() {
   const list = opinions();
-  if (!list.length && !draft.m.trim()) { $('feedback-status').textContent = '還沒有任何意見。可以先在上面按「我有意見」，或在「其他想說的話」寫下來。'; return; }
+  if (!list.length && !draft.m.trim()) { $('feedback-status').textContent = '還沒有任何意見。可以先在上面按「合理，OK」或「我有意見」，或在「其他想說的話」寫下來。'; return; }
   if (!draft.sid) { draft.sid = newId(); save(); }
   const payload = {
     v: 1, id: draft.sid, sentAt: new Date().toISOString(), name: draft.n.trim(), version: data.version || '', message: draft.m.trim(),
