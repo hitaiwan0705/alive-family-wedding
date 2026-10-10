@@ -4,7 +4,8 @@ const data = window.WEDDING;
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const n = document.createElement(tag); if (text !== undefined && text !== null) n.textContent = text; if (className) n.className = className; return n; };
 const phases = (data.phases || []).map(p => ({ candidates: [], schedule: [], prepare: [], budget: [], ...p }));
-const PARTIES = Object.keys(data.parties || { groom: '男方', couple: '新人', bride: '女方' });
+// 這一份是男方家的預算：負擔方只有男方與新人（content.js 的 parties 可覆寫）
+const PARTIES = Object.keys(data.parties || { groom: '男方', couple: '新人' });
 const partyName = k => (data.parties || {})[k] || k;
 const STORE_KEY = 'alive-wedding-draft-v2';
 const ENDPOINT = (() => { const u = ((window.SITE_CONFIG || {}).sheetEndpoint || '').trim(); return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u) ? u : ''; })();
@@ -26,7 +27,7 @@ const KINDS = {
   q: { label: '一起商量', button: '回答這題', title: '回答這一題', choices: [], placeholder: '想到什麼都可以說，例如：我覺得 7/24 比較好' },
   budget: { label: '預算', title: '對這筆花費的意見', choices: [['ok', '金額剛好'], ['less', '太多，可以少一點'], ['more', '不太夠，要多一點'], ['drop', '這項可以不用'], ['who', '想改由誰負擔']] }
 };
-const WHO = [['groom', `${partyName('groom')}全出`, { groom: 100 }], ['couple', `${partyName('couple')}全出`, { couple: 100 }], ['bride', `${partyName('bride')}全出`, { bride: 100 }], ['half', `${partyName('groom')}、${partyName('bride')}各半`, { groom: 50, bride: 50 }], ['other', '其他（請寫在下面）', null]];
+const WHO = [['groom', `${partyName('groom')}全出`, { groom: 100 }], ['couple', `${partyName('couple')}全出`, { couple: 100 }], ['half', `${partyName('groom')}、${partyName('couple')}各半`, { groom: 50, couple: 50 }], ['other', '其他（請寫在下面）', null]];
 const choiceLabel = (kind, f) => (KINDS[kind].choices.find(c => c[0] === f) || [])[1] || '';
 // 字串雜湊：讓「一起商量」的題目不必有 id，Codex 改字也不會弄丟已寫的回答（回答內附原題目）
 function hashOf(str) { let h = 5381; for (const ch of str) h = ((h << 5) + h + ch.codePointAt(0)) >>> 0; return h.toString(36); }
