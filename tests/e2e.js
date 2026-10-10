@@ -154,7 +154,7 @@ async function send(page, name) {
   check(big.some(r => r[col('看法代碼')] === 'ok' && r[col('看法')] === '金額剛好') && op.some(r => r[col('項目代碼')] === 'date:proposal' && r[col('看法')] === '這天可以'), '「合理，OK」寫入試算表的看法仍是「金額剛好」「這天可以」（欄位不變）');
   check(!op.some(r => r[col('項目代碼')] === 'date:registration'), '取消的「合理，OK」不會送出');
   const qRows = op.filter(r => r[col('類型')] === '一起商量' && r[col('看法')] === '合適');
-  check(qRows.length === 2 && qRows.every(r => String(r[col('項目名稱')]).includes('6 人')), '「一起商量」選項寫入試算表「看法」欄（2 則「合適」）');
+  check(qRows.length === 2 && qRows.every(r => String(r[col('項目名稱')]).includes('10 人')), '「一起商量」選項寫入試算表「看法」欄（2 則「合適」）');
   check(op.some(r => r[col('類型')] === '其他花費都沒意見' && r[col('場合')] === '結婚'), '「其他花費都沒意見」有寫入');
   check(op.every(r => r[col('由誰負擔')] === ''), '「由誰負擔」欄保留但不再寫入');
   check(op.some(r => r[col('項目代碼')] === 'B-005' && r[col('看法')] === '這項可以不用'), '喜餅「這項可以不用」有寫入');
