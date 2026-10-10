@@ -18,7 +18,7 @@ for (const p of phases) for (const item of p.budget) baseItems[item.id] = { ...i
 const OK_TEXT = '合理，OK';
 const MORE_TEXT = '我有意見';
 const KINDS = {
-  date: { label: '日期', title: '對日期的意見', choices: [['ok', '這天可以'], ['no', '這天不方便'], ['other', '想建議別的日子']], placeholder: '例如：10/25 比較方便，上午出發比較好' },
+  date: { label: '日期', title: '對日期的意見', choices: [['ok', '這天可以'], ['no', '這天不方便'], ['other', '想建議別的日子']], placeholder: '例如：7/24 比較好；或想先看農民曆再決定' },
   sched: { label: '當天行程', title: '對當天行程的意見', choices: [['ok', '這樣安排可以'], ['rush', '時間太趕'], ['change', '想加或減某個步驟']], placeholder: '例如：希望先拍長輩合照，大家比較不用久候' },
   prep: { label: '準備清單', title: '對準備清單的意見', choices: [['ok', '清單沒問題'], ['add', '我想補充一項'], ['who', '分工想調整']], placeholder: '例如：要準備讓長輩休息的椅子' },
   bok: { label: '其他花費', button: '其他花費都沒意見', title: '其他花費', choices: [['ok', '都沒意見']] },
