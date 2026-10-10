@@ -100,6 +100,17 @@ async function send(page, name) {
     await p.waitForSelector('#sent-panel:not([hidden])');
   });
 
+  // 點「太多」卻填了比原本高的金額：提示顯示差額，記下時看法跟著金額改成「不太夠」
+  const m = await elder('混淆', {}, async p => {
+    await p.locator('.budget-row', { hasText: '提親交通' }).first().locator('.opinion-button').click();
+    await p.click('#sheet .choice:has-text("太多，可以少一點")');
+    await p.fill('#sheet-amount-input', '25000');
+    check((await p.textContent('#sheet-amount-hint')).includes('比原本多 5,000 元'), '金額提示顯示「比原本多 5,000 元」');
+    await p.click('#sheet-form button[type=submit]');
+  });
+  check(await m.page.evaluate(() => JSON.parse(localStorage.getItem('alive-wedding-draft-v2')).e['B-036'].f) === 'more', '金額比原本高時，看法自動改為「不太夠，要多一點」');
+  await m.ctx.close();
+
   // 阿姨：第一次送出時網路斷線（伺服器其實收到了），再按一次 → 不可重複寫入
   const c = await elder('阿姨', { dropFirst: true }, async p => {
     await opine(p, '大聘', '太多，可以少一點', { amount: 250000 });
@@ -126,6 +137,7 @@ async function send(page, name) {
   check(op.some(r => r[col('由誰負擔')] === '男方、女方各半'), '「由誰負擔」有寫入');
   check(op.every(r => r[col('處理狀態')] === '待處理'), '新意見預設「待處理」');
   check(['意見整理', '圖表', '會議議程'].every(n => dump.order.includes(n)) && dump.sheets['圖表'].charts === 3, 'setup 建立整理、圖表（3 張）、會議議程');
+  check(dump.timeZone === 'Asia/Taipei', 'setup 把試算表時區設為台北');
 
   // 會議議程：提親日期（可以 1／不方便 1）分歧最大，接著大聘與方案（2:1）
   const agenda = dump.sheets['會議議程'].rows;
