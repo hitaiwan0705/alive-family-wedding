@@ -75,6 +75,7 @@ async function send(page, name) {
     await wire(ctx, opts);
     const page = await ctx.newPage();
     page.on('pageerror', e => errors.push(`${name}: ${e.message}`));
+    page.on('console', m => { if (m.text().includes('[小冊] 頁面缺少')) errors.push(`${name}: ${m.text()}`); });
     await page.goto(`http://127.0.0.1:${SITE_PORT}/index.html`);
     await steps(page);
     return { ctx, page };
@@ -187,6 +188,17 @@ async function send(page, name) {
   const op2 = dump2.sheets['意見明細'].rows.slice(1).filter(r => r && r[0]);
   check(op2.filter(r => r[col('處理狀態')] === '已回覆').length === 2, '回寫後 2 則變「已回覆」並有處理說明');
   check(!dump2.sheets['會議議程'].rows.slice(4, 7).some(r => r[1] === '提親'), '回寫後議程自動移除已處理的提親日期');
+  // 手機快取：index.html 引用的檔案要帶最新的內容雜湊，否則可能「新頁面＋舊程式」而打不開意見視窗
+  const stamp = await new Promise(r => execFile(process.execPath, [path.join(ROOT, 'tools/stamp-assets.js'), '--check'], (err, out, errOut) => r({ ok: !err, msg: (out + errOut).trim() })));
+  check(stamp.ok, 'index.html 的檔案版本號是最新的' + (stamp.ok ? '' : `（${stamp.msg}）`));
+  // 舊版程式＋新版頁面（或相反）時，意見視窗仍要打得開
+  const mix = await browser.newContext({ ...devices['iPhone 13'], locale: 'zh-TW' });
+  const mp = await mix.newPage();
+  await mp.route('**/index.html', async r => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace(/<p class="hint" id="sheet-amount-hint"><\/p>/, '') }); });
+  await mp.goto(`http://127.0.0.1:${SITE_PORT}/index.html`);
+  await mp.locator('.add-item').first().click();
+  check(await mp.evaluate(() => document.getElementById('sheet').open) && await mp.isVisible('#sheet-text'), '頁面少了元素時，意見視窗仍打得開、可以打字');
+  await mix.close();
   check(errors.length === 0, '網頁沒有錯誤' + (errors.length ? '：' + errors.join('; ') : ''));
 
   await browser.close(); gas.close();

@@ -31,6 +31,8 @@
 
 ## 給 Codex：`content.js` 欄位約定
 
+> **每次改完 `content.js`、`app.js`、`styles.css` 或 `config.js`，都要執行 `node tools/stamp-assets.js`**，更新 `index.html` 引用檔案的版本號（`?v=` 內容雜湊）。GitHub Pages 會讓手機快取檔案約 10 分鐘；沒更新版本號時，長輩的手機可能拿到「新頁面＋舊程式」，按「我有意見」會沒有反應。`tests/e2e.js` 會檢查版本號是否最新。
+
 `app.js` 只讀下列欄位；缺少的選填欄位會自動略過。
 
 | 欄位 | 必填 | 說明 |
