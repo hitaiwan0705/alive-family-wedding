@@ -53,7 +53,7 @@ Codex   ──GET（token）──▶ 同一個網址 ──讀出 JSON／CSV
 
 ## 給 Codex：整理摘要
 
-`feedback_digest.py` 會讀「待處理」的意見，依場合與項目分組（看法統計、建議金額範圍與中位數、長輩原話、意見編號），產生 Markdown 摘要與決定清單；`mark` 指令回寫處理狀態。完整工作流程與規則見 [`CODEX.md`](CODEX.md)。
+`feedback_digest.py` 會讀「待處理」的意見，依場合與項目分組（看法統計、建議金額範圍與中位數、長輩原話、意見編號），產生 Markdown 摘要與決定清單；`mark` 指令回寫處理狀態。沒有 token 時，可從試算表下載「意見明細」CSV，用 `digest --from-csv` 離線整理。完整工作流程與規則見 [`CODEX.md`](CODEX.md)。
 
 ## 給 Codex：讀取與回寫（API）
 
