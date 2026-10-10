@@ -11,9 +11,11 @@
 用法：
   python3 feedback_digest.py digest [--status 待處理|all] [--since 2026-10-15] [--out 摘要.md]
   python3 feedback_digest.py digest --from-json 意見.json     # 離線：用已下載的 JSON
+  python3 feedback_digest.py digest --from-csv 意見明細.csv [--submissions-csv 意見送出紀錄.csv]
+                                                              # 離線：試算表「檔案 → 下載 → CSV」，不需要 token
   python3 feedback_digest.py mark <意見編號> <待處理|採納|部分採納|不採納|已回覆> [處理說明]
 """
-import argparse, json, os, statistics, sys, urllib.parse, urllib.request
+import argparse, csv, json, os, re, statistics, sys, urllib.parse, urllib.request
 from collections import Counter, OrderedDict
 from datetime import datetime
 
@@ -169,12 +171,32 @@ def build_digest(opinions, submissions, status_label, since):
         ids = ' '.join(i.get('意見編號', '') for i in items)
         out.append(f'- [ ] 【{phase}】{name}：採納／部分採納／不採納／已回覆　（{ids}）')
     out += ['', '決定後回寫（每則意見一行）：', '', '```bash',
-            'python3 apps-script/feedback_digest.py mark <意見編號> 採納 "已改進 content.js 版本 05"', '```', '']
+            'python3 apps-script/feedback_digest.py mark <意見編號> 採納 "已更新家庭討論版 08"', '```', '']
     return '\n'.join(out)
 
 
+def csv_date(v):
+    """試算表 CSV 的「2027/1/5 下午 3:04:05」→「2027-01-05」，方便和 --since 比較。"""
+    m = re.match(r'\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})', str(v or ''))
+    return f'{m[1]}-{int(m[2]):02d}-{int(m[3]):02d}' if m else ''
+
+
+def read_csv(path):
+    with open(path, encoding='utf-8-sig', newline='') as f:  # Google 試算表下載的 CSV 可能帶 BOM
+        return [{k: (v or '').strip() for k, v in row.items()} for row in csv.DictReader(f)]
+
+
 def cmd_digest(a):
-    if a.from_json:
+    if a.from_csv:
+        opinions = [o for o in read_csv(a.from_csv) if o.get('意見編號')]
+        submissions = read_csv(a.submissions_csv) if a.submissions_csv else []
+        if a.status != 'all':
+            opinions = [o for o in opinions if o.get('處理狀態') == a.status]
+        if a.since:
+            opinions = [o for o in opinions if csv_date(o.get('送出時間')) >= a.since]
+        ids = {o.get('送出編號') for o in opinions}
+        submissions = [x for x in submissions if x.get('送出編號') in ids]
+    elif a.from_json:
         with open(a.from_json, encoding='utf-8') as f:
             data = json.load(f)
         opinions = data.get('opinions', data.get('rows', data if isinstance(data, list) else []))
@@ -218,6 +240,8 @@ def main():
     d.add_argument('--since', help='只看這天之後送出的（YYYY-MM-DD）')
     d.add_argument('--out', help='輸出檔案；未指定則印出')
     d.add_argument('--from-json', help='離線模式：讀取已下載的 JSON')
+    d.add_argument('--from-csv', help='離線模式：讀取試算表「意見明細」下載的 CSV（不需要 token）')
+    d.add_argument('--submissions-csv', help='搭配 --from-csv：「意見送出紀錄」下載的 CSV（含「其他想說的話」）')
     m = sub.add_parser('mark', help='回寫處理狀態')
     m.add_argument('opinion_id'); m.add_argument('status'); m.add_argument('note', nargs='?')
     a = p.parse_args()
