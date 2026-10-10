@@ -209,3 +209,4 @@ dialog::backdrop{background:rgba(40,25,25,.45)}
 @media(max-width:760px){.q-choice{flex:1 1 auto}}
 .scope-legend{font-size:.75rem!important;line-height:2.2}.scope-legend .scope{font-size:.68rem}
 .discussion>div>p:not(.eyebrow){font-size:.85rem;color:var(--muted);margin-top:16px}
+.summary-grid{grid-template-columns:1fr!important;max-width:720px}
