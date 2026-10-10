@@ -51,6 +51,7 @@ async function dateOpinion(page, phase, choice, text) {
   if (text) await page.fill('#sheet-text', text);
   await page.click('#sheet-form button[type=submit]');
 }
+async function okay(page, scope) { await page.locator(scope).first().locator('.pair-ok').click(); }
 async function pick(page, nth) { await page.locator('#compare-wedding .pick').nth(nth).click(); }
 async function answerFirstQuestion(page, text) {
   await page.locator('.question').first().locator('.opinion-button').click();
@@ -92,10 +93,18 @@ async function send(page, name) {
 
   // 舅舅：大聘剛好、喜餅各半、傾向午宴、提親日期可以
   await elder('舅舅', {}, async p => {
-    await opine(p, '大聘', '金額剛好');
+    // 「我有意見」視窗不再列「金額剛好」：同意要直接按旁邊的「合理，OK」
+    await p.locator('.budget-row', { hasText: '大聘' }).first().locator('.opinion-button').click();
+    check(await p.locator('#sheet .choice:has-text("金額剛好")').count() === 0, '「我有意見」視窗只列不同意見（沒有「金額剛好」）');
+    await p.click('#sheet-close');
+    await okay(p, '.budget-row:has-text("大聘")');
+    check(await p.locator('.budget-row:has-text("大聘") .pair-ok').first().getAttribute('aria-pressed') === 'true', '按「合理，OK」後按鈕呈現已選');
     await opine(p, '喜餅（', '想改由誰負擔', { who: '各半' });
     await pick(p, 0);
-    await dateOpinion(p, 'proposal', '這天可以');
+    await okay(p, '#date-proposal');
+    await okay(p, '#date-registration');
+    await okay(p, '#date-registration'); // 再按一次＝取消
+    check(await p.locator('#date-registration .pair-ok').getAttribute('aria-pressed') === 'false', '再按一次「合理，OK」會取消');
     await send(p, '舅舅');
     await p.waitForSelector('#sent-panel:not([hidden])');
   });
@@ -133,6 +142,8 @@ async function send(page, name) {
   const col = h => H.indexOf(h);
   const big = op.filter(r => r[col('項目代碼')] === 'B-001');
   check(big.length === 3 && big.some(r => r[col('建議金額')] === 200000) && big.some(r => r[col('原本金額')] === 360000), '大聘 3 則，建議金額與原本金額正確寫入');
+  check(big.some(r => r[col('看法代碼')] === 'ok' && r[col('看法')] === '金額剛好') && op.some(r => r[col('項目代碼')] === 'date:proposal' && r[col('看法')] === '這天可以'), '「合理，OK」寫入試算表的看法仍是「金額剛好」「這天可以」（欄位不變）');
+  check(!op.some(r => r[col('項目代碼')] === 'date:registration'), '取消的「合理，OK」不會送出');
   check(op.some(r => r[col('類型')] === '其他花費都沒意見' && r[col('場合')] === '結婚'), '「其他花費都沒意見」有寫入');
   check(op.some(r => r[col('由誰負擔')] === '男方、女方各半'), '「由誰負擔」有寫入');
   check(op.every(r => r[col('處理狀態')] === '待處理'), '新意見預設「待處理」');
