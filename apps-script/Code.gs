@@ -26,6 +26,7 @@ var MAX_PER_MINUTE = 30;
 /** 第一次安裝時手動執行一次：建立工作表、產生讀取用 token。 */
 function setup() {
   var ss = SpreadsheetApp.getActive();
+  ss.setSpreadsheetTimeZone('Asia/Taipei'); // 新試算表預設美國時區，送出時間會差 15 小時
   ensureSheet_(ss, SHEET_SUBMISSIONS, SUB_HEADERS);
   var op = ensureSheet_(ss, SHEET_OPINIONS, OP_HEADERS);
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUS, true).setAllowInvalid(false).build();

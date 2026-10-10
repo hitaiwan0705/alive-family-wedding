@@ -578,7 +578,13 @@ function radioGroup(host, name, options, value, onChange) {
 }
 const parseAmount = v => { const s = String(v).replace(/[^\d]/g, ''); return s ? Math.min(Number(s), 1e8) : undefined; };
 const stepOf = n => n >= 100000 ? 10000 : n >= 10000 ? 1000 : 500;
-function setAmount(n) { $('sheet-amount-input').value = n === undefined ? '' : n.toLocaleString('zh-TW'); $('sheet-amount-hint').textContent = n === undefined ? '不確定可以不填' : `＝ ${wan(n)}`; }
+// 金額提示：預算項目同時顯示和原本差多少，長輩一眼看得出是加還是減
+function amountHint(n) {
+  if (n === undefined) return '不確定可以不填';
+  const base = ctx && ctx.kind === 'budget' && baseItems[ctx.id] ? baseItems[ctx.id].amount : undefined;
+  return `＝ ${wan(n)}` + (typeof base === 'number' && n !== base ? `（比原本${signedWan(n - base)}）` : '');
+}
+function setAmount(n) { $('sheet-amount-input').value = n === undefined ? '' : n.toLocaleString('zh-TW'); $('sheet-amount-hint').textContent = amountHint(n); }
 function syncSheet() {
   const f = ctx.f;
   const showAmount = ctx.kind === 'add' || (ctx.kind === 'budget' && (f === 'less' || f === 'more'));
@@ -624,7 +630,7 @@ function openSheet(target) {
   (target.kind === 'add' ? $('sheet-name') : target.kind === 'q' ? $('sheet-text') : sheet.querySelector('input[name=feel]')).focus();
 }
 function closeSheet() { if (typeof sheet.close === 'function') sheet.close(); else sheet.removeAttribute('open'); }
-$('sheet-amount-input').addEventListener('input', () => { const n = parseAmount($('sheet-amount-input').value); $('sheet-amount-hint').textContent = n === undefined ? '不確定可以不填' : `＝ ${wan(n)}`; });
+$('sheet-amount-input').addEventListener('input', () => { $('sheet-amount-hint').textContent = amountHint(parseAmount($('sheet-amount-input').value)); });
 $('sheet-amount-input').addEventListener('blur', () => setAmount(parseAmount($('sheet-amount-input').value)));
 for (const [id, dir] of [['sheet-minus', -1], ['sheet-plus', 1]]) $(id).addEventListener('click', () => {
   const n = parseAmount($('sheet-amount-input').value) || 0;
@@ -661,7 +667,11 @@ $('sheet-form').addEventListener('submit', ev => {
     const x = {}; if (ctx.f) x.f = ctx.f; if (text) x.t = text;
     if (ctx.kind === 'budget') {
       const base = baseItems[ctx.id];
-      if ((x.f === 'less' || x.f === 'more') && amount !== undefined && amount !== base.amount) x.a = amount;
+      if ((x.f === 'less' || x.f === 'more') && amount !== undefined && amount !== base.amount) {
+        x.a = amount;
+        // 以填的金額為準：點「太多」卻填了比原本高的數字（或相反），看法跟著金額改，避免試算表出現矛盾
+        if (typeof base.amount === 'number') x.f = amount < base.amount ? 'less' : 'more';
+      }
       if (x.f === 'who' && ctx.w) x.w = ctx.w;
       draft.e[ctx.id] = x; anchor = `budget-${ctx.pid}`;
     } else { draft.c[`${ctx.kind}:${ctx.pid}`] = x; anchor = `${ctx.kind}-${ctx.pid}`; }

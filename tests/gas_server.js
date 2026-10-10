@@ -34,6 +34,7 @@ function createRuntime() {
   const sheets = {}, order = [];
   const ss = {
     getSheetByName: n => sheets[n] || null,
+    setSpreadsheetTimeZone: tz => { ss.timeZone = tz; },
     insertSheet: (n, i) => { sheets[n] = makeSheet(n, ss); i === undefined ? order.push(n) : order.splice(i, 0, n); return sheets[n]; }
   };
   const props = {}, cache = {};
@@ -49,7 +50,7 @@ function createRuntime() {
   };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8'), ctx);
-  return { ctx, sheets, order, props };
+  return { ctx, sheets, order, props, ss };
 }
 
 function serve(port, rt = createRuntime()) {
@@ -71,7 +72,7 @@ function serve(port, rt = createRuntime()) {
     if (url.pathname === '/admin') { rt.ctx[url.searchParams.get('fn')](); res.writeHead(200); return res.end('ok'); }
     if (url.pathname === '/admin/dump') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      return res.end(JSON.stringify({ order: rt.order, token: rt.props.READ_TOKEN, sheets: Object.fromEntries(Object.entries(rt.sheets).map(([k, v]) => [k, { rows: v.rows, charts: v.charts.length }])) }));
+      return res.end(JSON.stringify({ order: rt.order, timeZone: rt.ss.timeZone, token: rt.props.READ_TOKEN, sheets: Object.fromEntries(Object.entries(rt.sheets).map(([k, v]) => [k, { rows: v.rows, charts: v.charts.length }])) }));
     }
     res.writeHead(404); res.end();
   });
