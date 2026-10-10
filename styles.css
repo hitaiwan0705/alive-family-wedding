@@ -196,3 +196,16 @@ dialog::backdrop{background:rgba(40,25,25,.45)}
 .pair-ok:hover{background:#eef3ef}.pair-ok.on{background:var(--green);color:#fff}
 .inline-chip.ok-chip{border-color:var(--green);color:var(--green)}
 @media print{.opinion-pair{display:none!important}}
+
+/* 07 版：「一起商量」選項與由誰決定 */
+.question .scope{display:inline-block;margin:0 0 6px;font-size:.68rem}
+.scope-both{background:#f3e3e4;color:var(--wine)}.scope-couple{background:#e4ece6;color:var(--green)}
+.question-text{display:block}
+.q-choices{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px}
+.q-choice{min-height:48px;padding:8px 16px;border:2px solid #b9a998;border-radius:999px;background:#fff;color:var(--ink);font-size:.85rem;font-weight:600}
+.q-choice:hover{background:#fbf3e6}.q-choice.on{border-color:var(--wine);background:var(--wine);color:#fff}
+.q-choice:disabled{cursor:default;opacity:1}
+.question .opinion-button{margin-top:8px;min-height:44px;padding:6px 14px;font-size:.8rem}
+@media(max-width:760px){.q-choice{flex:1 1 auto}}
+.scope-legend{font-size:.75rem!important;line-height:2.2}.scope-legend .scope{font-size:.68rem}
+.discussion>div>p:not(.eyebrow){font-size:.85rem;color:var(--muted);margin-top:16px}

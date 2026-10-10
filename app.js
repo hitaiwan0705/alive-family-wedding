@@ -30,7 +30,13 @@ const WHO = [['groom', `${partyName('groom')}全出`, { groom: 100 }], ['couple'
 const choiceLabel = (kind, f) => (KINDS[kind].choices.find(c => c[0] === f) || [])[1] || '';
 // 字串雜湊：讓「一起商量」的題目不必有 id，Codex 改字也不會弄丟已寫的回答（回答內附原題目）
 function hashOf(str) { let h = 5381; for (const ch of str) h = ((h << 5) + h + ch.codePointAt(0)) >>> 0; return h.toString(36); }
-const questionList = () => (data.questions || []).map(q => ({ key: hashOf(q), q }));
+// questions 可以是純文字（只能寫回答），或 { q, scope, choices }：scope 標示由誰決定，choices 是一按就記下的選項
+const SCOPES = { both: '兩家一起商量', couple: '新人決定・先聽聽您的意見' };
+const questionList = () => (data.questions || []).map(x => {
+  const o = typeof x === 'string' ? { q: x } : x || {};
+  return { key: hashOf(o.q || ''), q: o.q || '', scope: SCOPES[o.scope] ? o.scope : '', choices: Array.isArray(o.choices) ? o.choices.filter(c => typeof c === 'string' && c.trim()) : [] };
+}).filter(x => x.q);
+const questionByKey = key => questionList().find(x => x.key === key);
 // 精簡模式要表態的地方：content.js 可用 ask: true/false 指定；預設為未確認、可表態的項目
 function needsAsk(x) {
   if (x.ask === true) return true;
@@ -104,8 +110,8 @@ function sanitize(raw) {
   for (const [p, id] of Object.entries(raw.o || {})) { const c = phaseById[p] && phaseById[p].compare; if (c && c.options.some(o => o.id === id)) d.o[p] = id; }
   for (const [k, v] of Object.entries(raw.q || {})) {
     if (!v || typeof v !== 'object' || !/^[0-9a-z]{1,10}$/.test(k)) continue;
-    const t = cleanStr(v.t, 500).trim(); const q = cleanStr(v.q, 200).trim();
-    if (t && q) d.q[k] = { q, t };
+    const t = cleanStr(v.t, 500).trim(); const q = cleanStr(v.q, 200).trim(); const c = cleanStr(v.c, 40).trim();
+    if (q && (t || c)) { d.q[k] = { q }; if (c) d.q[k].c = c; if (t) d.q[k].t = t; }
   }
   if (typeof raw.sid === 'string' && /^[a-z0-9]{6,40}$/.test(raw.sid)) d.sid = raw.sid;
   d.n = cleanStr(raw.n, 40); d.m = cleanStr(raw.m, 2000);
@@ -195,7 +201,7 @@ function opinions() {
   }
   const qPhase = { id: 'questions', short: '一起商量', label: '一起商量' };
   for (const [key, o] of Object.entries(draft.q)) {
-    push(qPhase, o.q, o.t, { kind: 'q', targetId: `q:${key}`, choiceLabel: '回答', text: o.t }, () => openSheet({ kind: 'q', key, q: o.q }), () => { delete draft.q[key]; });
+    push(qPhase, o.q, [o.c, o.t].filter(Boolean).join('——'), { kind: 'q', targetId: `q:${key}`, choiceLabel: o.c || '回答', text: o.t || '' }, () => openSheet({ kind: 'q', key, q: o.q, choices: (questionByKey(key) || {}).choices || [] }), () => { delete draft.q[key]; });
   }
   return list;
 }
@@ -244,9 +250,9 @@ function renderRoadmap() {
 }
 
 // ---------- 「我有意見」按鈕與已記下的意見 ----------
-function opinionButton(label, onClick, has, about) {
+function opinionButton(label, onClick, has, about, hasLabel = '改我的意見') {
   const b = node('button', undefined, `opinion-button${has ? ' has' : ''}`); b.type = 'button';
-  b.append(icon(), node('span', has ? '改我的意見' : label));
+  b.append(icon(), node('span', has ? hasLabel : label));
   b.setAttribute('aria-label', `${has ? '修改我對' : '我對'}「${about || label}」${has ? '的意見' : '有意見'}`);
   b.addEventListener('click', onClick);
   return b;
@@ -526,12 +532,31 @@ function renderBasket() {
 
 function renderQuestions() {
   const ol = $('questions'); ol.replaceChildren();
-  for (const { key, q } of questionList()) {
+  // 「兩家一起商量」排前面，再來是「新人決定」；同一類保留 content.js 的順序
+  const list = questionList().map((x, i) => ({ ...x, i })).sort((a, b) => (a.scope === 'couple') - (b.scope === 'couple') || a.i - b.i);
+  for (const { key, q, scope, choices } of list) {
     const li = node('li', undefined, 'question'); li.id = `q-${key}`;
+    if (scope) li.append(node('span', SCOPES[scope], `pill scope scope-${scope}`));
     li.append(node('span', q, 'question-text'));
     const o = draft.q[key];
-    if (o) li.append(myNote(o.t, '我的回答'));
-    if (!readOnly) li.append(opinionButton(o ? '改我的回答' : KINDS.q.button, () => openSheet({ kind: 'q', key, q }), !!o, q));
+    if (choices.length) {
+      const row = node('div', undefined, 'q-choices'); row.setAttribute('role', 'group'); row.setAttribute('aria-label', `「${q}」的選項`);
+      for (const c of choices) {
+        const on = !!o && o.c === c;
+        const b = node('button', on ? `✓ ${c}` : c, `q-choice${on ? ' on' : ''}`); b.type = 'button'; b.disabled = readOnly;
+        b.setAttribute('aria-pressed', String(on));
+        b.addEventListener('click', () => {
+          const before = snapshot(); const cur = draft.q[key];
+          if (on) { if (cur.t) delete cur.c; else delete draft.q[key]; commit('已取消這個選擇', before, `q-${key}`); return; }
+          draft.q[key] = { ...(cur || {}), q: q.slice(0, 200), c };
+          commit(`已記下：${c}`, before, `q-${key}`);
+        });
+        row.append(b);
+      }
+      li.append(row);
+    }
+    if (o && (o.t || readOnly)) li.append(myNote([o.c, o.t].filter(Boolean).join('——'), '我的回答'));
+    if (!readOnly) li.append(opinionButton(choices.length ? '想多說一點' : KINDS.q.button, () => openSheet({ kind: 'q', key, q, choices }), !!(o && o.t), q, choices.length ? '改我的補充' : '改我的回答'));
     ol.append(li);
   }
   // 已回答、但題目已被改寫或移除的回答，仍保留在「傳意見」清單裡
@@ -626,7 +651,7 @@ function openSheet(target) {
   let existing = null; let item = null;
   if (target.kind === 'budget') { item = baseItems[target.id]; existing = draft.e[target.id]; }
   else if (target.kind === 'add') existing = target.id ? draft.ad.find(a => a.id === target.id) : null;
-  else if (target.kind === 'q') existing = draft.q[target.key];
+  else if (target.kind === 'q') existing = draft.q[target.key] && { ...draft.q[target.key], f: draft.q[target.key].c };
   else existing = draft.c[`${target.kind}:${target.pid}`];
   ctx.f = existing && existing.f !== 'ok' ? existing.f : undefined; ctx.w = existing && existing.w;
 
@@ -638,7 +663,9 @@ function openSheet(target) {
   $('sheet-context').textContent = where.filter(Boolean).join('・');
   $('sheet-name-field').hidden = target.kind !== 'add';
   $('sheet-name').value = target.kind === 'add' && existing ? existing.nm : '';
-  $('sheet-choices').hidden = target.kind === 'add' || target.kind === 'q';
+  const qChoices = target.kind === 'q' ? (target.choices || []).map(c => [c, c]) : [];
+  $('sheet-choices').hidden = target.kind === 'add' || (target.kind === 'q' && !qChoices.length);
+  if (qChoices.length) radioGroup($('sheet-choice-list'), 'feel', qChoices, ctx.f, v => { ctx.f = v; });
   if (target.kind !== 'add' && target.kind !== 'q') radioGroup($('sheet-choice-list'), 'feel', KINDS[target.kind].choices.filter(c => c[0] !== 'ok'), ctx.f, v => { ctx.f = v; if ((v === 'less' || v === 'more') && item && $('sheet-amount-input').value === '' && typeof item.amount === 'number') setAmount(item.amount); syncSheet(); });
   radioGroup($('sheet-who-list'), 'who', WHO.map(w => [w[0], w[1]]), ctx.w, v => { ctx.w = v; });
   setAmount(existing && existing.a !== undefined ? existing.a : undefined);
@@ -686,8 +713,9 @@ $('sheet-form').addEventListener('submit', ev => {
     const i = draft.ad.findIndex(a => a.id === x.id); if (i >= 0) draft.ad[i] = x; else draft.ad.push(x);
     anchor = `budget-${ctx.pid}`;
   } else if (ctx.kind === 'q') {
-    if (!text) { $('sheet-error').textContent = '請寫幾個字，或按鍵盤上的麥克風用說的。'; $('sheet-text').focus(); return; }
-    draft.q[ctx.key] = { q: ctx.q.slice(0, 200), t: text }; anchor = `q-${ctx.key}`;
+    if (!text && !ctx.f) { $('sheet-error').textContent = (ctx.choices || []).length ? '請點一個選項，或寫幾個字都可以。' : '請寫幾個字，或按鍵盤上的麥克風用說的。'; $('sheet-text').focus(); return; }
+    const x = { q: ctx.q.slice(0, 200) }; if (ctx.f) x.c = ctx.f; if (text) x.t = text;
+    draft.q[ctx.key] = x; anchor = `q-${ctx.key}`;
   } else {
     if (!ctx.f && !text) { $('sheet-error').textContent = '請點一個看法，或寫幾個字都可以。'; return; }
     const x = {}; if (ctx.f) x.f = ctx.f; if (text) x.t = text;
