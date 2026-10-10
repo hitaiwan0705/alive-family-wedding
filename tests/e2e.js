@@ -102,7 +102,7 @@ async function send(page, name) {
     check(await p.locator('.budget-row:has-text("大聘") .pair-ok').first().getAttribute('aria-pressed') === 'true', '按「合理，OK」後按鈕呈現已選');
     await opine(p, '喜餅（', '想改由誰負擔', { who: '各半' });
     await pick(p, 0);
-    check(await p.locator('.question .scope-both').count() > 0 && await p.locator('.question .scope-couple').count() > 0, '「一起商量」每題標出兩家商量或新人決定');
+    check(await p.locator('.question .scope-both').count() > 0 && await p.locator('.question .scope-couple').count() > 0, '「一起商量」每題標出兩家商量或新人擬定');
     await qChoice(p, 1, '合適');
     check(await p.locator('.question').nth(1).locator('.q-choice.on').textContent() === '✓ 合適', '「一起商量」選項一按就記下');
     await okay(p, '#date-proposal');

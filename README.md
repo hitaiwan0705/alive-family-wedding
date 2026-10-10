@@ -48,7 +48,7 @@
 | `phases[].compare` | 選填 | 方案比較：`title`、`intro`、`options[]`（`id`、`name`、`sub`、`times`、`costs[{item, low, mid, high}]`、`points`）、`conclusion`、`unknown`、`sources` |
 | `budgetNotes[]` | 選填 | 預算總覽下方註記 |
 | `months[]` | 選填 | `{month:'YYYY-MM', focus, tasks:[{text, who}]}` |
-| `questions[]` | 選填 | 討論題。可為純文字（只能寫回答），或 `{ q, scope, choices }`：`scope` 為 `both`（兩家一起商量）或 `couple`（新人決定、先聽長輩意見），頁面依此加標籤並把兩家題排前面；`choices` 是題目下方一按就記下的選項（例如「合適」「建議擇日」），試算表「看法」欄寫入選項文字、「文字」欄寫補充。一題只問一件事，選項才答得清楚。回答以題目文字雜湊對應並附原題，改字不會遺失已寫的回答 |
+| `questions[]` | 選填 | 討論題。可為純文字（只能寫回答），或 `{ q, scope, choices }`：`scope` 為 `both`（兩家一起商量）或 `couple`（新人擬定、請長輩一起出主意；用語刻意避免「新人決定」，讓長輩感覺參與而不是被告知），頁面依此加標籤並把兩家題排前面；`choices` 是題目下方一按就記下的選項（例如「合適」「建議擇日」），試算表「看法」欄寫入選項文字、「文字」欄寫補充。一題只問一件事，選項才答得清楚。回答以題目文字雜湊對應並附原題，改字不會遺失已寫的回答 |
 | `decisions[]`、`sources[]` | 選填 | 已確認紀錄、資料來源 |
 | `feedback.email` | 選填 | 設定後才出現 Email 寄出 |
 
