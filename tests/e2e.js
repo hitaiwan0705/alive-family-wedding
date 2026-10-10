@@ -52,6 +52,7 @@ async function dateOpinion(page, phase, choice, text) {
   await page.click('#sheet-form button[type=submit]');
 }
 async function okay(page, scope) { await page.locator(scope).first().locator('.pair-ok').click(); }
+async function qChoice(page, nth, label) { await page.locator('.question').nth(nth).locator(`.q-choice:has-text("${label}")`).click(); }
 async function pick(page, nth) { await page.locator('#compare-wedding .pick').nth(nth).click(); }
 async function answerFirstQuestion(page, text) {
   await page.locator('.question').first().locator('.opinion-button').click();
@@ -101,6 +102,9 @@ async function send(page, name) {
     check(await p.locator('.budget-row:has-text("大聘") .pair-ok').first().getAttribute('aria-pressed') === 'true', '按「合理，OK」後按鈕呈現已選');
     await opine(p, '喜餅（', '想改由誰負擔', { who: '各半' });
     await pick(p, 0);
+    check(await p.locator('.question .scope-both').count() > 0 && await p.locator('.question .scope-couple').count() > 0, '「一起商量」每題標出兩家商量或新人決定');
+    await qChoice(p, 1, '合適');
+    check(await p.locator('.question').nth(1).locator('.q-choice.on').textContent() === '✓ 合適', '「一起商量」選項一按就記下');
     await okay(p, '#date-proposal');
     await okay(p, '#date-registration');
     await okay(p, '#date-registration'); // 再按一次＝取消
@@ -123,12 +127,13 @@ async function send(page, name) {
   // 阿姨：第一次送出時網路斷線（伺服器其實收到了），再按一次 → 不可重複寫入
   const c = await elder('阿姨', { dropFirst: true }, async p => {
     await opine(p, '大聘', '太多，可以少一點', { amount: 250000 });
+    await qChoice(p, 1, '合適');
     await pick(p, 1);
     await p.locator('#budget-wedding .bok').click();
     await send(p, '阿姨');
     await p.waitForFunction(() => document.getElementById('feedback-status').textContent.includes('沒有送出去'));
   });
-  check(await c.page.locator('.opinion-item').count() === 3, '阿姨：送出失敗時意見仍保留（3 則）');
+  check(await c.page.locator('.opinion-item').count() === 4, '阿姨：送出失敗時意見仍保留（4 則）');
   await c.page.click('#sheet-button');
   await c.page.waitForSelector('#sent-panel:not([hidden])');
   check(true, '阿姨：重按後顯示已送出');
@@ -137,13 +142,15 @@ async function send(page, name) {
   const op = dump.sheets['意見明細'].rows.slice(1).filter(r => r && r[0]);
   const sub = dump.sheets['意見送出紀錄'].rows.slice(1).filter(r => r && r[0]);
   check(sub.length === 3, `意見送出紀錄 3 筆（實際 ${sub.length}）`);
-  check(op.length === 4 + 4 + 3, `意見明細 11 則，重送未重複（實際 ${op.length}）`);
+  check(op.length === 4 + 5 + 4, `意見明細 13 則，重送未重複（實際 ${op.length}）`);
   const H = dump.sheets['意見明細'].rows[0];
   const col = h => H.indexOf(h);
   const big = op.filter(r => r[col('項目代碼')] === 'B-001');
   check(big.length === 3 && big.some(r => r[col('建議金額')] === 200000) && big.some(r => r[col('原本金額')] === 360000), '大聘 3 則，建議金額與原本金額正確寫入');
   check(big.some(r => r[col('看法代碼')] === 'ok' && r[col('看法')] === '金額剛好') && op.some(r => r[col('項目代碼')] === 'date:proposal' && r[col('看法')] === '這天可以'), '「合理，OK」寫入試算表的看法仍是「金額剛好」「這天可以」（欄位不變）');
   check(!op.some(r => r[col('項目代碼')] === 'date:registration'), '取消的「合理，OK」不會送出');
+  const qRows = op.filter(r => r[col('類型')] === '一起商量' && r[col('看法')] === '合適');
+  check(qRows.length === 2 && qRows.every(r => String(r[col('項目名稱')]).includes('6 人')), '「一起商量」選項寫入試算表「看法」欄（2 則「合適」）');
   check(op.some(r => r[col('類型')] === '其他花費都沒意見' && r[col('場合')] === '結婚'), '「其他花費都沒意見」有寫入');
   check(op.some(r => r[col('由誰負擔')] === '男方、女方各半'), '「由誰負擔」有寫入');
   check(op.every(r => r[col('處理狀態')] === '待處理'), '新意見預設「待處理」');
@@ -164,7 +171,8 @@ async function send(page, name) {
   const top = digest.split('## 會議先談這三項')[1] || '';
   check(/1\. 【提親】日期/.test(top), '摘要「會議先談這三項」第 1 項與議程相同');
   check(digest.includes('20 萬（大姑）、25 萬（阿姨）'), '摘要列出建議金額與長輩稱呼');
-  check(digest.includes('共 **11 則**意見，來自 3 位'), '摘要總數正確（11 則、3 位）');
+  check(digest.includes('共 **13 則**意見，來自 3 位'), '摘要總數正確（13 則、3 位）');
+  check(digest.includes('2 位回答：合適 ×2'), '摘要列出「一起商量」選項分布');
   const wrongToken = await py([path.join(ROOT, 'apps-script/feedback_digest.py'), 'digest'], { ...env, ALIVE_FEEDBACK_TOKEN: 'wrong' }).then(() => false, e => String(e.stderr).includes('forbidden'));
   check(wrongToken, '錯誤 token 讀不到資料');
 

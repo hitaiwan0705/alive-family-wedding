@@ -69,7 +69,10 @@ def kind_key(name):
 
 
 def item_view(kind, i):
-    return (i.get('文字') or '').strip() if kind == '一起商量' else (i.get('看法') or '（只寫文字）')
+    picked = i.get('看法') or ''
+    if kind == '一起商量' and picked in ('', '回答'):  # 討論題只寫文字（舊格式）時，比較文字
+        return (i.get('文字') or '').strip()
+    return picked or '（只寫文字）'
 
 
 def view_text(kind, items):
@@ -134,7 +137,8 @@ def build_digest(opinions, submissions, status_label, since):
         names = sorted({i.get('稱呼') or '（未留名）' for i in items})
         verdict = '只有一位' if len(items) == 1 else ('看法一致' if len(views) == 1 else '看法分歧')
         if kind == '一起商量':
-            out.append(f'- {len(names)} 位回答')
+            picks = Counter(i.get('看法') for i in items if i.get('看法') not in (None, '', '回答'))
+            out.append(f'- {len(names)} 位回答' + ('：' + '、'.join(f'{v} ×{c}' for v, c in picks.most_common()) if picks else ''))
         else:
             out.append(f'- 看法：' + '、'.join(f'{v} ×{c}' for v, c in views.most_common()) + f'（{len(names)} 位，{verdict}）')
         base = next((num(i.get('原本金額')) for i in items if num(i.get('原本金額')) is not None), None)

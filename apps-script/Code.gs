@@ -184,7 +184,7 @@ function onEdit(e) {
 
 /**
  * 「會議議程」：只看「待處理」；同一項目 2 則以上，依看法分歧程度排序，取前三項。
- * 分歧程度 = 1 −（最多人選的看法則數 ÷ 總則數）。討論題以回答文字比較。
+ * 分歧程度 = 1 −（最多人選的看法則數 ÷ 總則數）。討論題有選項時比較選項，只寫文字時比較文字。
  * 規則與 feedback_digest.py 的 agenda() 相同。
  */
 function agendaGroups_(rows) {
@@ -199,7 +199,8 @@ function agendaGroups_(rows) {
   return order.map(function (k) {
     var g = groups[k], counts = {}, people = {};
     g.items.forEach(function (r) {
-      var view = g.kind === KIND_LABEL.q ? String(r[idx('文字')] || '').trim() : (r[idx('看法')] || '（只寫文字）');
+      var picked = String(r[idx('看法')] || '');
+      var view = g.kind === KIND_LABEL.q && (!picked || picked === '回答') ? String(r[idx('文字')] || '').trim() : (picked || '（只寫文字）');
       counts[view] = (counts[view] || 0) + 1;
       people[r[idx('稱呼')] || '（未留名）'] = 1;
     });
