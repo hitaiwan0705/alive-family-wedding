@@ -1,7 +1,8 @@
 'use strict';
 // 互動層：只負責顯示 content.js 與收集長輩意見。內容（日期、金額、文字）一律由 content.js 提供。
 const data = window.WEDDING;
-const $ = id => document.getElementById(id);
+// 找不到元素時回傳一個不在頁面上的替身，避免頁面與程式版本不一致（手機快取）時整個功能失效
+const $ = id => document.getElementById(id) || (console.warn(`[小冊] 頁面缺少 #${id}`), document.createElement('div'));
 const node = (tag, text, className) => { const n = document.createElement(tag); if (text !== undefined && text !== null) n.textContent = text; if (className) n.className = className; return n; };
 const phases = (data.phases || []).map(p => ({ candidates: [], schedule: [], prepare: [], budget: [], ...p }));
 const STORE_KEY = 'alive-wedding-draft-v2';
@@ -640,6 +641,9 @@ function openSheet(target) {
   else if (target.kind === 'date') where.push(p.when);
   else if (target.kind === 'q') where.splice(0, 1, target.q);
   $('sheet-context').textContent = where.filter(Boolean).join('・');
+  // 「合理，OK」和「我有意見」是二選一：從 OK 進來時先說清楚，記下後會換成這則意見
+  const wasOk = target.kind !== 'q' && target.kind !== 'add' && existing && existing.f === 'ok';
+  if (wasOk) $('sheet-context').textContent += `（目前選的是「${OK_TEXT}」，記下後會改成這則意見）`;
   $('sheet-name-field').hidden = target.kind !== 'add';
   $('sheet-name').value = target.kind === 'add' && existing ? existing.nm : '';
   const qChoices = target.kind === 'q' ? (target.choices || []).map(c => [c, c]) : [];
