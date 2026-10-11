@@ -77,6 +77,12 @@ async function send(page, name) {
     page.on('pageerror', e => errors.push(`${name}: ${e.message}`));
     page.on('console', m => { if (m.text().includes('[小冊] 頁面缺少')) errors.push(`${name}: ${m.text()}`); });
     await page.goto(`http://127.0.0.1:${SITE_PORT}/index.html`);
+    if(name==='大姑') {
+      const current=await page.evaluate(()=>window.WEDDING.phases[0]);
+      check(current.status==='提親日期已確認'&&current.why.includes('女方父親確認'),'提親日期顯示已與女方父親確認');
+      check(current.avoid===''&&!current.schedule.some(x=>x.time.includes('18:00')),'提親不顯示籠統避忌或未定返程時刻');
+      check(['10/13','10/14','10/15','10/16','10/17'].every(d=>current.prepare.some(g=>g.group.includes(d))),'準備清單列出五個預計更新日');
+    }
     await steps(page);
     return { ctx, page };
   };
