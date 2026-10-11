@@ -55,7 +55,7 @@ async function okay(page, scope) { await page.locator(scope).first().locator('.p
 async function qChoice(page, nth, label) { await page.locator('.question').nth(nth).locator(`.q-choice:has-text("${label}")`).click(); }
 async function pick(page, nth) { await page.locator('#compare-wedding .pick').nth(nth).click(); }
 async function answerFirstQuestion(page, text) {
-  await page.locator('.question').first().locator('.opinion-button').click();
+  await page.locator('.question').nth(1).locator('.opinion-button').click();
   await page.fill('#sheet-text', text);
   await page.click('#sheet-form button[type=submit]');
 }
@@ -81,21 +81,24 @@ async function send(page, name) {
     return { ctx, page };
   };
 
-  // 大姑：大聘太多（20 萬）、提親日期不方便、傾向晚宴、回答第一題
+  // 大姑：大聘太多（20 萬）、訂婚日期不方便、傾向晚宴、用文字回答一題
   const a = await elder('大姑', {}, async p => {
     await opine(p, '大聘', '太多，可以少一點', { amount: 200000, text: '女方家可能會退一部分' });
-    await dateOpinion(p, 'proposal', '這天不方便', '10/25 比較好');
+    await dateOpinion(p, 'engagement', '這天不方便', '3/27 比較好');
     await pick(p, 1);
     await answerFirstQuestion(p, '10/24 可以，上午出發');
     await send(p, '大姑');
     await p.waitForSelector('#sent-panel:not([hidden])');
   });
   check(await a.page.locator('#sent-panel').isVisible(), '大姑：看到「已送到新人那裡」');
+  check(await a.page.locator('#filled-at').inputValue() === '尚未填寫', '送出後清空，填寫時間不殘留');
+  await a.page.fill('#name', '大姑姑'); await a.page.waitForTimeout(100);
+  check(await a.page.locator('#filled-at').inputValue() === '尚未填寫', '只改稱呼不算填寫意見');
   check((await a.page.locator('#sent-text').textContent()).includes('台北時間'), '送出確認顯示台北完整時間');
   check(await a.page.locator('#filled-at').getAttribute('readonly') !== null, '填寫時間由系統記錄，不要求長輩手填');
   check(await a.page.locator('.opinion-item').count() === 0, '大姑：送出後清單清空');
 
-  // 舅舅：大聘剛好、喜餅可以不用、傾向午宴、提親日期可以
+  // 舅舅：大聘剛好、喜餅可以不用、傾向午宴、訂婚日期可以
   await elder('舅舅', {}, async p => {
     // 「我有意見」視窗不再列「金額剛好」：同意要直接按旁邊的「合理，OK」
     await p.locator('.budget-row', { hasText: '大聘' }).first().locator('.opinion-button').click();
@@ -109,9 +112,10 @@ async function send(page, name) {
     await p.click('#sheet-form button[type=submit]');
     await pick(p, 0);
     check(await p.locator('.question .scope-both').count() > 0 && await p.locator('.question .scope-couple').count() > 0, '「一起商量」每題標出兩家商量或擬定');
-    await qChoice(p, 1, '合適');
-    check(await p.locator('.question').nth(1).locator('.q-choice.on').textContent() === '✓ 合適', '「一起商量」選項一按就記下');
-    await okay(p, '#date-proposal');
+    await qChoice(p, 0, '合適');
+    check(await p.locator('.question').nth(0).locator('.q-choice.on').textContent() === '✓ 合適', '「一起商量」選項一按就記下');
+    check(await p.locator('#date-proposal .opinion-button').count() === 0, '已確認的提親日期不再請長輩表態');
+    await okay(p, '#date-engagement');
     await okay(p, '#date-registration');
     await okay(p, '#date-registration'); // 再按一次＝取消
     check(await p.locator('#date-registration .pair-ok').getAttribute('aria-pressed') === 'false', '再按一次「合理，OK」會取消');
@@ -133,7 +137,7 @@ async function send(page, name) {
   // 阿姨：第一次送出時網路斷線（伺服器其實收到了），再按一次 → 不可重複寫入
   const c = await elder('阿姨', { dropFirst: true }, async p => {
     await opine(p, '大聘', '太多，可以少一點', { amount: 250000 });
-    await qChoice(p, 1, '合適');
+    await qChoice(p, 0, '合適');
     await pick(p, 1);
     await p.locator('#budget-wedding .bok').click();
     await send(p, '阿姨');
@@ -153,7 +157,7 @@ async function send(page, name) {
   const col = h => H.indexOf(h);
   const big = op.filter(r => r[col('項目代碼')] === 'B-001');
   check(big.length === 3 && big.some(r => r[col('建議金額')] === 200000) && big.some(r => r[col('原本金額')] === 360000), '大聘 3 則，建議金額與原本金額正確寫入');
-  check(big.some(r => r[col('看法代碼')] === 'ok' && r[col('看法')] === '金額剛好') && op.some(r => r[col('項目代碼')] === 'date:proposal' && r[col('看法')] === '這天可以'), '「合理，OK」寫入試算表的看法仍是「金額剛好」「這天可以」（欄位不變）');
+  check(big.some(r => r[col('看法代碼')] === 'ok' && r[col('看法')] === '金額剛好') && op.some(r => r[col('項目代碼')] === 'date:engagement' && r[col('看法')] === '這天可以'), '「合理，OK」寫入試算表的看法仍是「金額剛好」「這天可以」（欄位不變）');
   check(!op.some(r => r[col('項目代碼')] === 'date:registration'), '取消的「合理，OK」不會送出');
   const qRows = op.filter(r => r[col('類型')] === '一起商量' && r[col('看法')] === '合適');
   check(qRows.length === 2 && qRows.every(r => String(r[col('項目名稱')]).includes('10 人')), '「一起商量」選項寫入試算表「看法」欄（2 則「合適」）');
@@ -164,11 +168,11 @@ async function send(page, name) {
   check(['意見整理', '圖表', '會議議程'].every(n => dump.order.includes(n)) && dump.sheets['圖表'].charts === 3, 'setup 建立整理、圖表（3 張）、會議議程');
   check(dump.timeZone === 'Asia/Taipei', 'setup 把試算表時區設為台北');
 
-  // 會議議程：提親日期（可以 1／不方便 1）分歧最大，接著大聘與方案（2:1）
+  // 會議議程：訂婚日期（可以 1／不方便 1）分歧最大，接著大聘與方案（2:1）
   const agenda = dump.sheets['會議議程'].rows;
   const topRows = agenda.slice(4, 7).map(r => `${r[1]}|${r[2]}|${r[5]}`);
   console.log('      議程前三：' + topRows.join('  /  '));
-  check(topRows[0] && topRows[0].startsWith('提親|日期|意見分歧大'), '議程第 1 項是提親日期（意見分歧大）');
+  check(topRows[0] && topRows[0].startsWith('訂婚|日期|意見分歧大'), '議程第 1 項是訂婚日期（意見分歧大）');
   check(topRows.slice(1).every(t => /大聘|方案比較/.test(t)), '議程第 2、3 項是大聘與午宴／晚宴');
   check(!topRows.some(t => t.startsWith('一起商量')), '只有一則的回答不會排進前三');
 
@@ -176,20 +180,20 @@ async function send(page, name) {
   const env = { ...process.env, ALIVE_FEEDBACK_ENDPOINT: `http://127.0.0.1:${GAS_PORT}/macros/s/TESTDEPLOY/exec`, ALIVE_FEEDBACK_TOKEN: dump.token };
   const digest = await py([path.join(ROOT, 'apps-script/feedback_digest.py'), 'digest'], env);
   const top = digest.split('## 會議先談這三項')[1] || '';
-  check(/1\. 【提親】日期/.test(top), '摘要「會議先談這三項」第 1 項與議程相同');
+  check(/1\. 【訂婚】日期/.test(top), '摘要「會議先談這三項」第 1 項與議程相同');
   check(digest.includes('20 萬（大姑）、25 萬（阿姨）'), '摘要列出建議金額與長輩稱呼');
   check(digest.includes('共 **13 則**意見，來自 3 位'), '摘要總數正確（13 則、3 位）');
   check(digest.includes('2 位回答：合適 ×2'), '摘要列出「一起商量」選項分布');
   const wrongToken = await py([path.join(ROOT, 'apps-script/feedback_digest.py'), 'digest'], { ...env, ALIVE_FEEDBACK_TOKEN: 'wrong' }).then(() => false, e => String(e.stderr).includes('forbidden'));
   check(wrongToken, '錯誤 token 讀不到資料');
 
-  // 新人決定：提親日期兩則都標「已回覆」→ 議程更新
+  // 新人決定：訂婚日期兩則都標「已回覆」→ 議程更新
   const ids = op.filter(r => r[col('類型')] === '日期').map(r => r[col('意見編號')]);
-  for (const id of ids) await py([path.join(ROOT, 'apps-script/feedback_digest.py'), 'mark', id, '已回覆', '提親改 10/25'], env);
+  for (const id of ids) await py([path.join(ROOT, 'apps-script/feedback_digest.py'), 'mark', id, '已回覆', '日期請命理老師確認'], env);
   const dump2 = await (await fetch(`http://127.0.0.1:${GAS_PORT}/admin/dump`)).json();
   const op2 = dump2.sheets['意見明細'].rows.slice(1).filter(r => r && r[0]);
   check(op2.filter(r => r[col('處理狀態')] === '已回覆').length === 2, '回寫後 2 則變「已回覆」並有處理說明');
-  check(!dump2.sheets['會議議程'].rows.slice(4, 7).some(r => r[1] === '提親'), '回寫後議程自動移除已處理的提親日期');
+  check(!dump2.sheets['會議議程'].rows.slice(4, 7).some(r => r[1] === '訂婚' && r[2] === '日期'), '回寫後議程自動移除已處理的訂婚日期');
   // 手機快取：index.html 引用的檔案要帶最新的內容雜湊，否則可能「新頁面＋舊程式」而打不開意見視窗
   const stamp = await new Promise(r => execFile(process.execPath, [path.join(ROOT, 'tools/stamp-assets.js'), '--check'], (err, out, errOut) => r({ ok: !err, msg: (out + errOut).trim() })));
   check(stamp.ok, 'index.html 的檔案版本號是最新的' + (stamp.ok ? '' : `（${stamp.msg}）`));
