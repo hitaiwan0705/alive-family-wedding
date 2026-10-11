@@ -51,6 +51,13 @@ function wan(n) {
   return `${parseFloat((n / 10000).toFixed(2))} 萬`;
 }
 const signedWan = n => (n > 0 ? '多 ' : '少 ') + wan(Math.abs(n));
+function formatFeedbackTime(value) {
+  if (!value) return '尚未填寫';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value}（舊紀錄未提供時分）`;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '時間未提供';
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(date) + '（台北時間）';
+}
 const today = new Date();
 const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -109,6 +116,7 @@ function sanitize(raw) {
   }
   if (typeof raw.sid === 'string' && /^[a-z0-9]{6,40}$/.test(raw.sid)) d.sid = raw.sid;
   d.n = cleanStr(raw.n, 40); d.m = cleanStr(raw.m, 2000);
+  if (typeof raw.t === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(raw.t) && Number.isFinite(Date.parse(raw.t))) d.t = new Date(raw.t).toISOString();
   return d;
 }
 function encode(obj) {
@@ -132,6 +140,7 @@ else {
 }
 function save() {
   if (readOnly) return;
+  draft.t = new Date().toISOString();
   try { localStorage.setItem(STORE_KEY, JSON.stringify(draft)); } catch (_) { /* 私密瀏覽等情況，只在本次瀏覽有效 */ }
 }
 
@@ -192,13 +201,13 @@ function opinions() {
   return list;
 }
 function proposalUrl() {
-  const payload = { v: 2, ver: data.version, t: isoToday, n: draft.n, m: draft.m, e: draft.e, ad: draft.ad, c: draft.c, o: draft.o, q: draft.q };
+  const payload = { v: 2, ver: data.version, t: draft.t || '', n: draft.n, m: draft.m, e: draft.e, ad: draft.ad, c: draft.c, o: draft.o, q: draft.q };
   return `${location.origin}${location.pathname}#p=${encode(payload)}`;
 }
 function feedbackText() {
   const list = opinions();
   const before = grandTotal(false), after = grandTotal(true);
-  const out = [`婚禮小冊的意見（${data.version}）`, `來自：${draft.n.trim() || '（沒有留名字）'}`, ''];
+  const out = [`婚禮小冊的意見（${data.version}）`, `來自：${draft.n.trim() || '（沒有留名字）'}`, `填寫時間：${formatFeedbackTime(readOnly ? proposal.t : draft.t)}`, ''];
   if (list.length) out.push(`我有 ${list.length} 則意見：`, ...list.map((o, i) => `${i + 1}. 【${o.phase.short}】${o.label}：${o.text}`), '');
   if (before !== after) out.push(`照我的意見，預算合計 ${wan(before)} → ${wan(after)}（${signedWan(after - before)}）`, '');
   if (draft.m.trim()) out.push(`其他想說的話：${draft.m.trim()}`, '');
@@ -478,6 +487,7 @@ function renderSummary() {
 
 // ---------- 傳意見區 ----------
 function renderBasket() {
+  $('filled-at').value = formatFeedbackTime(readOnly ? proposal.t : draft.t);
   const list = opinions();
   const ul = $('opinion-list'); ul.replaceChildren();
   if (!list.length) {
@@ -783,7 +793,7 @@ async function sendToSheet() {
     try { localStorage.setItem('alive-wedding-sent', JSON.stringify([...sentKeys])); } catch (_) { /* 忽略 */ }
     draft = { ...emptyDraft(), n: draft.n }; save(); $('message').value = '';
     renderAll();
-    const time = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    const time = formatFeedbackTime(payload.sentAt);
     $('sent-text').textContent = `${time} 送出 ${sentCount} 則意見。新人會整理後和兩家討論。還有想到的，可以繼續按「我有意見」再送一次。`;
     $('line-notify').href = `https://line.me/R/share?text=${encodeURIComponent(`我在婚禮小冊留了 ${sentCount} 則意見，已經送到意見表了。${draft.n.trim() ? `——${draft.n.trim()}` : ''}`)}`;
     $('sent-panel').hidden = false; $('sent-panel').focus();
@@ -804,7 +814,7 @@ if (readOnly) {
   $('focus-toggle').hidden = true;
   $('proposal-banner').hidden = false;
   $('proposal-title').textContent = `${draft.n.trim() || '家人'}的意見（尚未採納）`;
-  const when = typeof proposal.t === 'string' ? proposal.t.slice(0, 10) : '';
+  const when = typeof proposal.t === 'string' ? formatFeedbackTime(proposal.t) : '';
   const ver = typeof proposal.ver === 'string' ? proposal.ver.slice(0, 40) : '';
   $('proposal-meta').textContent = `${when ? `${when} 傳來・` : ''}看的是「${ver || '未知版本'}」。底色標示的地方就是這位家人的意見。${ver && ver !== data.version ? '（正式版本已更新，部分內容可能不同。）' : ''}`;
   $('feedback-title').textContent = '這位家人的意見';
