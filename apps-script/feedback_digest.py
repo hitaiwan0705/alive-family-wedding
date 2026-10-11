@@ -101,6 +101,11 @@ def agenda(groups):
     return [(k, items, d) for k, items, d, _ in ranked]
 
 
+def filled_at(row):
+    """相容新版試算表欄名與既有 API；時間採系統收到送出的時間。"""
+    return row.get('填寫時間') or row.get('送出時間') or '未提供'
+
+
 def build_digest(opinions, submissions, status_label, since):
     today = datetime.now().strftime('%Y-%m-%d')
     people = sorted({o.get('稱呼') or '（未留名）' for o in opinions})
@@ -154,6 +159,7 @@ def build_digest(opinions, submissions, status_label, since):
         if whos:
             out.append('- 由誰負擔：' + '、'.join(f'{w}（{who}）' for w, who in whos))
         for i in items:
+            out.append(f'- 填寫時間：{filled_at(i)}（{i.get("稱呼") or "（未留名）"}；{i.get("意見編號", "")}）')
             if (i.get('文字') or '').strip():
                 out.append(f'  > {i.get("稱呼") or "（未留名）"}：{i["文字"].strip()}')
         out.append(f'- 意見編號：' + '、'.join(i.get('意見編號', '') for i in items))
@@ -163,7 +169,7 @@ def build_digest(opinions, submissions, status_label, since):
     if messages:
         out += ['## 其他想說的話', '']
         for s in messages:
-            out.append(f'> {s.get("稱呼") or "（未留名）"}（{str(s.get("送出時間", ""))[:10]}）：{s["其他想說的話"].strip()}')
+            out.append(f'> {s.get("稱呼") or "（未留名）"}（填寫時間：{filled_at(s)}）：{s["其他想說的話"].strip()}')
         out.append('')
 
     out += ['## 給新人的決定清單', '']
@@ -193,7 +199,7 @@ def cmd_digest(a):
         if a.status != 'all':
             opinions = [o for o in opinions if o.get('處理狀態') == a.status]
         if a.since:
-            opinions = [o for o in opinions if csv_date(o.get('送出時間')) >= a.since]
+            opinions = [o for o in opinions if csv_date(filled_at(o)) >= a.since]
         ids = {o.get('送出編號') for o in opinions}
         submissions = [x for x in submissions if x.get('送出編號') in ids]
     elif a.from_json:
