@@ -138,9 +138,16 @@ if (readOnly) draft = sanitize(proposal);
 else {
   try { const saved = localStorage.getItem(STORE_KEY) || localStorage.getItem(OLD_STORE_KEY); if (saved) draft = sanitize(JSON.parse(saved)); } catch (_) { /* 無法讀取就從空白開始 */ }
 }
+// 填寫時間＝意見內容最後一次改動的時間；只改稱呼、或送出後清空，都不會改到它
+const contentSig = d => JSON.stringify([d.e, d.ad, d.c, d.o, d.q, (d.m || '').trim()]);
+const EMPTY_SIG = contentSig(emptyDraft());
+let lastSig = contentSig(draft);
 function save() {
   if (readOnly) return;
-  draft.t = new Date().toISOString();
+  const sig = contentSig(draft);
+  if (sig === EMPTY_SIG) delete draft.t;
+  else if (sig !== lastSig || !draft.t) draft.t = new Date().toISOString();
+  lastSig = sig;
   try { localStorage.setItem(STORE_KEY, JSON.stringify(draft)); } catch (_) { /* 私密瀏覽等情況，只在本次瀏覽有效 */ }
 }
 
