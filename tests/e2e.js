@@ -91,6 +91,8 @@ async function send(page, name) {
     await p.waitForSelector('#sent-panel:not([hidden])');
   });
   check(await a.page.locator('#sent-panel').isVisible(), '大姑：看到「已送到新人那裡」');
+  check((await a.page.locator('#sent-text').textContent()).includes('台北時間'), '送出確認顯示台北完整時間');
+  check(await a.page.locator('#filled-at').getAttribute('readonly') !== null, '填寫時間由系統記錄，不要求長輩手填');
   check(await a.page.locator('.opinion-item').count() === 0, '大姑：送出後清單清空');
 
   // 舅舅：大聘剛好、喜餅可以不用、傾向午宴、提親日期可以
@@ -198,6 +200,23 @@ async function send(page, name) {
   await mp.goto(`http://127.0.0.1:${SITE_PORT}/index.html`);
   await mp.locator('.add-item').first().click();
   check(await mp.evaluate(() => document.getElementById('sheet').open) && await mp.isVisible('#sheet-text'), '頁面少了元素時，意見視窗仍打得開、可以打字');
+  await mp.fill('#sheet-name', '時間測試');
+  await mp.fill('#sheet-text', '確認時間會寫進文字與連結');
+  await mp.click('#sheet-form button[type=submit]');
+  const filled = await mp.locator('#filled-at').inputValue();
+  check(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}（台北時間）/.test(filled), '填寫時間包含年月日與時分秒');
+  const link = await mp.locator('#line-button').getAttribute('href');
+  check(decodeURIComponent(link).includes('填寫時間：'+filled), 'LINE文字保留完整填寫時間');
+  const proposalLink = await mp.evaluate(() => proposalUrl());
+  await mp.goto(proposalLink);
+  await mp.reload(); // 模擬接收者首次打開連結，不只是同頁改 hash
+  check((await mp.locator('#proposal-meta').textContent()).includes(filled), '意見連結顯示原填寫時間，不只日期');
+  await mp.locator('#feedback').scrollIntoViewIfNeeded();
+  await mp.screenshot({path:process.env.ALIVE_SCREENSHOT || '/tmp/alive-feedback-time.png'});
+  const legacy = await mp.evaluate(() => { const p=decode(location.hash.slice(3));p.t='2026-10-10';return location.origin+location.pathname+'#p='+encode(p); });
+  await mp.goto(legacy);
+  await mp.reload();
+  check((await mp.locator('#proposal-meta').textContent()).includes('舊紀錄未提供時分'), '舊意見不補造時分');
   await mix.close();
   check(errors.length === 0, '網頁沒有錯誤' + (errors.length ? '：' + errors.join('; ') : ''));
 
