@@ -398,7 +398,10 @@ function renderPhases() {
     const tl = node('ol', undefined, 'timeline');
     for (const s of p.schedule) {
       const li = node('li'); const body = node('div');
-      body.append(node('h4', s.title), node('p', s.detail)); if (s.who) body.append(node('span', s.who, 'who'));
+      body.append(node('h4', s.title), node('p', s.detail));
+      // 選填 link：{ url, text }，只接受 https（例如餐廳地圖）
+      if (s.link && /^https:\/\//.test(s.link.url || '')) { const a = node('a', s.link.text || '開啟地圖', 'map-link'); a.href = s.link.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; body.append(a); }
+      if (s.who) body.append(node('span', s.who, 'who'));
       li.append(node('span', s.time, 'event-time'), body); tl.append(li);
     }
     left.append(tl);

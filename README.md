@@ -41,7 +41,7 @@
 | `phases[].id`、`label`、`short`、`when`、`status` | 是 | `id` 不要更改，否則舊的意見連結對不上 |
 | `phases[].target` | 選填 | `YYYY-MM-DD`，用於首頁「下一件事」倒數 |
 | `phases[].candidates`、`place`、`why`、`avoid` | 選填 | 日期卡內容 |
-| `phases[].schedule[]` | 選填 | `{time, title, detail, who}`；`scheduleNote` 為行程下方註記 |
+| `phases[].schedule[]` | 選填 | `{time, title, detail, who, link}`；`link` 選填 `{url, text}`（僅 https，例如地圖連結）；`scheduleNote` 為行程下方註記 |
 | `phases[].prepare[]` | 選填 | `{group, items:[{text, who}]}` |
 | `phases[].budget[]` | 選填 | `{id, name, amount, low, high, note, status}`（不寫負擔分配 `split`）；`private: true` 不列金額；`locked: true` 不開放意見。`id` 沿用 Alive `Budget_ID`，不要更改 |
 | `ask`（日期卡層級 `phases[]` 或 `budget[]`） | 選填 | 精簡模式是否列為要表態：`true`／`false`。未填時，`status` 含「已確認」且不含「待」、或 `private`／`locked` 者不列入 |
