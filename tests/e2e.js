@@ -81,6 +81,7 @@ async function send(page, name) {
       const current = await page.evaluate(() => window.WEDDING.phases[0]);
       check(current.status === '提親日期已確認' && current.why.includes('女方父親確認'), '提親日期顯示已與女方父親確認');
       check(current.schedule.some(x => x.time === '12:00–14:00') && current.schedule.some(x => x.time === '14:00–16:00'), '提親行程列出午餐與談正事時段');
+      check(current.schedule.some(x => x.link && x.link.url.startsWith('https://')) && await page.locator('#phase-proposal a.map-link[target=_blank]').count() === 1, '提親行程附餐廳地圖連結（另開新頁）');
       check(!JSON.stringify(current).match(/待核|媽咪|老爹|尚禮|詩音|擬10\/1[3-7]/), '提親內容沒有內部備註、家人暱稱或過期日期');
     }
     await steps(page);
