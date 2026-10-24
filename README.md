@@ -43,6 +43,8 @@
 | `phases[].candidates`、`place`、`why`、`avoid` | 選填 | 日期卡內容 |
 | `phases[].schedule[]` | 選填 | `{time, title, detail, who, link}`；`link` 選填 `{url, text}`（僅 https，例如地圖連結）；`scheduleNote` 為行程下方註記 |
 | `phases[].talk` | 選填 | 家人當天討論小抄：`{title, intro, steps:[{time, topic, points[], say}], reminders[]}`；頁面公開，女方家也可能看到，只寫可公開的順序與態度，不寫金額、退回協議或談判底線 |
+| `phases[].guides` | 選填 | 討論與紀錄原則：`[{id, title, items[], template}]`；`template` 為可一鍵複製的紀錄格式 |
+| `phases[].memos` | 選填 | 每個人的備忘錄：`{title, intro, common[], members:[{id, role, focus, duties[], notes[]}]}`；一人一頁，網址 `#memo-<id>` 直接打開；只用稱謂，不放本名或私人備註 |
 | `phases[].prepare[]` | 選填 | `{group, items:[{text, who}]}` |
 | `phases[].budget[]` | 選填 | `{id, name, amount, low, high, note, status}`（不寫負擔分配 `split`）；`private: true` 不列金額；`locked: true` 不開放意見。`id` 沿用 Alive `Budget_ID`，不要更改 |
 | `ask`（日期卡層級 `phases[]` 或 `budget[]`） | 選填 | 精簡模式是否列為要表態：`true`／`false`。未填時，`status` 含「已確認」且不含「待」、或 `private`／`locked` 者不列入 |

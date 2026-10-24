@@ -394,6 +394,72 @@ function renderTalk(p) {
   return box;
 }
 
+// 複製文字；不支援時改用 prompt 讓長輩長按複製
+async function copyText(text, button, done) {
+  try { if (!navigator.clipboard) throw new Error('no clipboard'); await navigator.clipboard.writeText(text); button.textContent = done; }
+  catch (_) { window.prompt('請長按下方文字、全選後複製', text); }
+}
+
+// 選填 guides：[{ id, title, items[], template }]，討論與紀錄原則；template 可一鍵複製
+function renderGuides(p) {
+  const box = node('details', undefined, 'talk guides fold'); box.id = `guides-${p.id}`; box.open = !focusMode;
+  const sm = node('summary'); sm.append(node('h3', '討論與紀錄原則', 'block-title')); box.append(sm);
+  for (const g of p.guides) {
+    const part = node('div', undefined, 'guide'); part.id = `guide-${g.id}`;
+    part.append(node('h4', g.title, 'prep-group'));
+    const ol = node('ol', undefined, 'guide-list'); for (const x of g.items || []) ol.append(node('li', x)); part.append(ol);
+    if (g.template) {
+      const pre = node('pre', g.template, 'record-template');
+      const b = node('button', '複製紀錄格式', 'button small secondary'); b.type = 'button';
+      b.addEventListener('click', () => copyText(g.template, b, '已複製，可以貼到手機記事本'));
+      part.append(pre, b);
+    }
+    box.append(part);
+  }
+  return box;
+}
+
+// 選填 memos：{ title, intro, common[], members: [{ id, role, focus, duties[], notes[] }] }，一人一頁；網址 #memo-<id> 直接打開該頁
+let memoTab = location.hash.startsWith('#memo-') ? location.hash.slice(6) : null;
+function renderMemos(p) {
+  const m = p.memos, members = m.members || [];
+  if (!members.some(x => x.id === memoTab)) memoTab = members[0]?.id;
+  const box = node('details', undefined, 'talk memos fold'); box.id = `memos-${p.id}`; box.open = !focusMode || location.hash.startsWith('#memo-');
+  const sm = node('summary'); sm.append(node('h3', m.title || '每個人的備忘錄', 'block-title')); box.append(sm);
+  if (m.intro) box.append(node('p', m.intro, 'talk-intro'));
+  const tabs = node('div', undefined, 'memo-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', '選擇成員');
+  const panels = [];
+  const select = (id, focus) => {
+    memoTab = id;
+    for (const b of tabs.children) { const on = b.dataset.id === id; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); }
+    for (const pn of panels) pn.hidden = pn.dataset.id !== id;
+  };
+  members.forEach((mb, i) => {
+    const b = node('button', mb.role, 'memo-tab'); b.type = 'button'; b.id = `memo-tab-${mb.id}`; b.dataset.id = mb.id;
+    b.setAttribute('role', 'tab'); b.setAttribute('aria-controls', `memo-${mb.id}`);
+    b.addEventListener('click', () => select(mb.id));
+    b.addEventListener('keydown', ev => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[ev.key]; if (!step) return;
+      ev.preventDefault(); select(members[(i + step + members.length) % members.length].id, true);
+    });
+    tabs.append(b);
+    const pn = node('div', undefined, 'memo-panel'); pn.id = `memo-${mb.id}`; pn.dataset.id = mb.id;
+    pn.setAttribute('role', 'tabpanel'); pn.setAttribute('aria-labelledby', b.id); pn.tabIndex = 0;
+    pn.append(node('h4', `${mb.role}的備忘`), node('p', mb.focus, 'memo-focus'));
+    const list = (title, items, cls) => { if (!(items || []).length) return; pn.append(node('h5', title, 'prep-group')); const ul = node('ul', undefined, cls); for (const x of items) ul.append(node('li', x)); pn.append(ul); };
+    list('當天要做的事', mb.duties, 'checklist');
+    list('提醒', mb.notes, 'memo-notes');
+    list('大家都要記得', m.common, 'memo-notes');
+    const link = node('button', '複製我這一頁的連結', 'button small secondary'); link.type = 'button';
+    link.addEventListener('click', () => copyText(`${location.origin}${location.pathname}#memo-${mb.id}`, link, '已複製連結'));
+    pn.append(link);
+    panels.push(pn);
+  });
+  box.append(tabs, ...panels);
+  select(memoTab);
+  return box;
+}
+
 function renderPhases() {
   const host = $('phases'); host.replaceChildren();
   phases.forEach((p, idx) => {
@@ -439,6 +505,8 @@ function renderPhases() {
     const prepOp = sectionOpinion('prep', p.id); if (prepOp) right.append(prepOp);
     grid.append(left, right); sec.append(grid);
     if (p.talk) sec.append(renderTalk(p));
+    if (p.guides) sec.append(renderGuides(p));
+    if (p.memos) sec.append(renderMemos(p));
     if (p.compare) sec.append(renderCompare(p));
 
     const bud = node('div', undefined, 'phase-budget'); bud.id = `budget-${p.id}`;
@@ -875,3 +943,11 @@ for (const item of data.decisions || []) {
 for (const s of data.sources || []) { const li = node('li'); const a = node('a', s.title); a.href = s.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; li.append(a); $('sources').append(li); }
 renderMonths();
 renderAll();
+// 從 #memo-<id> 連結進來：打開該成員的備忘錄
+function openMemoFromHash() {
+  if (!location.hash.startsWith('#memo-')) return;
+  memoTab = location.hash.slice(6); renderAll();
+  document.getElementById(`memo-${memoTab}`)?.closest('.memos')?.scrollIntoView();
+}
+window.addEventListener('hashchange', openMemoFromHash);
+openMemoFromHash();
