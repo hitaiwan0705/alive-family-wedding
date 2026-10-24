@@ -221,3 +221,13 @@ dialog::backdrop{background:rgba(40,25,25,.45)}
 .talk-say{background:var(--soft);border-radius:6px;padding:10px 14px;font-size:.85rem;margin:6px 0 0}.talk-say strong{color:var(--wine)}
 @media(max-width:760px){.talk{padding:16px;margin-left:-4px;margin-right:-4px}.talk-steps>li{grid-template-columns:1fr;gap:2px}}
 @media print{.talk-steps>li{break-inside:avoid}}
+.guide+.guide{margin-top:22px}.guide-list{margin:0 0 12px;padding-left:1.4em;font-size:.85rem}.guide-list li{padding:3px 0}
+.record-template{white-space:pre-wrap;background:var(--soft);border-radius:6px;padding:12px 16px;font:inherit;font-size:.8rem;line-height:1.7;margin:0 0 12px}
+.memo-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 18px}
+.memo-tab{background:transparent;border:1px solid var(--wine);border-radius:999px;padding:8px 16px;min-height:48px;color:var(--wine);font-size:.85rem}
+.memo-tab[aria-selected=true]{background:var(--wine);color:#fff}
+.memo-panel h4{font-size:1.05rem;margin:0 0 2px}.memo-focus{font-size:.85rem;color:var(--green);margin-bottom:6px}
+.memo-panel h5{margin:16px 0 6px}.memo-notes{margin:0 0 6px;padding-left:1.1em;font-size:.85rem}.memo-panel .button{margin-top:14px}
+@media(max-width:760px){.memo-tab{flex:1 1 30%;padding:8px 6px}}
+@media print{.memo-tabs,.memo-panel .button,.guides .button{display:none!important}.memo-panel[hidden]{display:block!important}}
+.memo-panel:focus:not(:focus-visible){outline:none}
