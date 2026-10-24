@@ -81,6 +81,8 @@ async function send(page, name) {
       const current = await page.evaluate(() => window.WEDDING.phases[0]);
       check(current.status.startsWith('提親日期已確認') && current.why.includes('女方父親確認'), '提親日期顯示已與女方父親確認');
       check(current.schedule.some(x => x.time === '12:00–14:00') && current.schedule.some(x => x.time === '14:00–16:00'), '提親行程列出午餐與談正事時段');
+      check(await page.locator('#talk-proposal .talk-steps > li').count() === (current.talk.steps || []).length && await page.locator('#talk-proposal').innerText().then(t => t.includes('可以這樣說')), '提親討論小抄顯示順序與說法');
+      check(!/萬|退回|底線/.test(JSON.stringify(current.talk)), '討論小抄不寫金額、退回或底線');
       const tripText = JSON.stringify(current);
       check(!/計程車/.test(tripText) && !/09\d{2}[-\s]?\d{3}[-\s]?\d{3}|[A-Z]{2,3}-\d{4}/.test(tripText), '提親行程不再寫計程車，也沒有司機電話或車牌');
       check(current.schedule.some(x => x.link && x.link.url.startsWith('https://')) && await page.locator('#phase-proposal a.map-link[target=_blank]').count() === 1, '提親行程附餐廳地圖連結（另開新頁）');

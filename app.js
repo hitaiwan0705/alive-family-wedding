@@ -373,6 +373,27 @@ function renderCompare(p) {
   return box;
 }
 
+// 選填 talk：{ title, intro, steps: [{ time, topic, points[], say }], reminders[] }，家人當天討論用的小抄
+function renderTalk(p) {
+  const t = p.talk, box = node('details', undefined, 'talk fold'); box.id = `talk-${p.id}`; box.open = !focusMode;
+  const sm = node('summary'); sm.append(node('h3', t.title || '討論小抄', 'block-title')); box.append(sm);
+  if (t.intro) box.append(node('p', t.intro, 'talk-intro'));
+  const ol = node('ol', undefined, 'talk-steps');
+  for (const s of t.steps || []) {
+    const li = node('li'), body = node('div');
+    body.append(node('h4', s.topic));
+    if ((s.points || []).length) { const ul = node('ul'); for (const x of s.points) ul.append(node('li', x)); body.append(ul); }
+    if (s.say) { const q = node('p', undefined, 'talk-say'); q.append(node('strong', '可以這樣說　'), document.createTextNode(s.say)); body.append(q); }
+    li.append(node('span', s.time, 'event-time'), body); ol.append(li);
+  }
+  box.append(ol);
+  if ((t.reminders || []).length) {
+    box.append(node('h4', '提醒自己', 'prep-group'));
+    const ul = node('ul', undefined, 'checklist'); for (const r of t.reminders) ul.append(node('li', r)); box.append(ul);
+  }
+  return box;
+}
+
 function renderPhases() {
   const host = $('phases'); host.replaceChildren();
   phases.forEach((p, idx) => {
@@ -417,6 +438,7 @@ function renderPhases() {
     }
     const prepOp = sectionOpinion('prep', p.id); if (prepOp) right.append(prepOp);
     grid.append(left, right); sec.append(grid);
+    if (p.talk) sec.append(renderTalk(p));
     if (p.compare) sec.append(renderCompare(p));
 
     const bud = node('div', undefined, 'phase-budget'); bud.id = `budget-${p.id}`;

@@ -212,3 +212,12 @@ dialog::backdrop{background:rgba(40,25,25,.45)}
 .summary-grid{grid-template-columns:1fr!important;max-width:720px}
 .map-link{display:flex;width:fit-content;align-items:center;min-height:44px;font-size:.85rem;font-weight:700;margin:0 0 4px}
 @media print{.map-link{display:none}}
+.talk{border:1px solid var(--line);border-radius:10px;padding:22px;background:#fff;margin-bottom:28px}
+.talk-intro{font-size:.85rem;color:var(--muted)}
+.talk-steps{list-style:none;padding:0;margin:8px 0 18px}
+.talk-steps>li{display:grid;grid-template-columns:110px minmax(0,1fr);gap:20px;padding:14px 0;border-bottom:1px dashed var(--line)}
+.talk-steps h4{font-size:1rem;margin:0 0 4px}
+.talk-steps ul{margin:0 0 6px;padding-left:1.1em;font-size:.85rem}
+.talk-say{background:var(--soft);border-radius:6px;padding:10px 14px;font-size:.85rem;margin:6px 0 0}.talk-say strong{color:var(--wine)}
+@media(max-width:760px){.talk{padding:16px;margin-left:-4px;margin-right:-4px}.talk-steps>li{grid-template-columns:1fr;gap:2px}}
+@media print{.talk-steps>li{break-inside:avoid}}
