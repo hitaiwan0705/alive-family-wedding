@@ -79,7 +79,7 @@ async function send(page, name) {
     await page.goto(`http://127.0.0.1:${SITE_PORT}/index.html`);
     if (name === '大姑') {
       const current = await page.evaluate(() => window.WEDDING.phases[0]);
-      check(current.status.startsWith('提親日期已確認') && current.why.includes('女方父親確認'), '提親日期顯示已與女方父親確認');
+      check(/^提親(日期已確認|已完成)/.test(current.status) && current.why.includes('女方父親確認'), '提親日期顯示已與女方父親確認（或已完成）');
       check(current.schedule.some(x => x.time === '12:00–14:00') && current.schedule.some(x => x.time === '14:00–16:00'), '提親行程列出午餐與談正事時段');
       check(await page.locator('#talk-proposal .talk-steps > li').count() === (current.talk.steps || []).length && await page.locator('#talk-proposal').innerText().then(t => t.includes('可以這樣說')), '提親討論小抄顯示順序與說法');
       check(!/萬|退回|底線/.test(JSON.stringify(current.talk)), '討論小抄不寫金額、退回或底線');

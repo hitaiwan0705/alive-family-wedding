@@ -40,7 +40,7 @@ function needsAsk(x) {
   if (x.ask === true) return true;
   if (x.ask === false || x.locked || x.private) return false;
   const st = x.status || '';
-  return !(st.includes('已確認') && !st.includes('待'));
+  return !((st.includes('已確認') || st.includes('已完成')) && !st.includes('待'));
 }
 
 // ---------- 格式 ----------
